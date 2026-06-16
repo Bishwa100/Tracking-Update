@@ -55,6 +55,15 @@ class Visitor(Base):
     is_staff = Column(Boolean, default=False)     # exclude from analytics
     is_active = Column(Boolean, default=True)     # soft delete
 
+    # Consent / privacy (GDPR / BIPA compliance)
+    consent_status = Column(String(20), nullable=True, default="implicit")
+    consent_at = Column(DateTime(timezone=True), nullable=True)
+    consent_method = Column(String(50), nullable=True)
+    opted_out_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Recognition confidence (0.3 = tentative, 1.0 = confirmed staff/explicit)
+    visit_confidence = Column(Float, nullable=True, default=0.3)
+
     faces = relationship(
         "VisitorFace", back_populates="visitor", cascade="all, delete-orphan"
     )
@@ -98,6 +107,7 @@ class VisitorFace(Base):
     det_score = Column(Float, nullable=False, default=0.0)
     body_embedding = Column(Vector(512), nullable=True)
     source_frame_path = Column(Text, nullable=True)
+    pose_bin = Column(String(20), nullable=True, default="unknown")
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
     visitor = relationship("Visitor", back_populates="faces")

@@ -55,3 +55,26 @@ async def analytics_top_visitors(
 ):
     rows = await analytics_service.top_visitors(db, limit)
     return [TopVisitor(**r) for r in rows]
+
+
+@router.get("/confidence-weighted")
+async def analytics_confidence_weighted(
+    since: Optional[datetime] = Query(None),
+    until: Optional[datetime] = Query(None),
+    min_confidence: float = Query(0.40, ge=0.0, le=1.0),
+    db: AsyncSession = Depends(get_db),
+    _key: str = Security(verify_api_key),
+):
+    """Summary with confidence-weighted unique visitor count."""
+    return await analytics_service.confidence_weighted_summary(db, since, until, min_confidence)
+
+
+@router.get("/detection-quality")
+async def analytics_detection_quality(
+    since: Optional[datetime] = Query(None),
+    until: Optional[datetime] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    _key: str = Security(verify_api_key),
+):
+    """Detection quality band breakdown (high / medium / low confidence)."""
+    return await analytics_service.detection_quality_report(db, since, until)

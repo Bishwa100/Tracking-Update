@@ -1,5 +1,7 @@
 """
 Analytics query builders. Staff and soft-deleted visitors are excluded.
+Confidence-weighted metrics discount low-quality detections so false registrations
+don't inflate unique-visitor counts.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -131,3 +133,92 @@ async def top_visitors(db: AsyncSession, limit: int = 10) -> list[dict]:
         }
         for r in rows
     ]
+
+
+# ── Confidence-weighted analytics ────────────────────────────────────────────
+
+async def confidence_weighted_summary(
+    db: AsyncSession,
+    since: Optional[datetime],
+    until: Optional[datetime],
+    min_confidence: float = 0.40,
+) -> dict:
+    """
+    Like summary() but weights each detection by face_similarity so that
+    low-confidence detections contribute fractionally rather than equally.
+    The effective_unique count is a confidence-weighted head count and is
+    always ≤ the raw unique count.
+    """
+    since, until = _range(since, until)
+    params = {"since": since, "until": until, "min_conf": min_confidence}
+
+    row = (await db.execute(text("""
+        WITH weighted AS (
+            SELECT
+                de.visitor_id,
+                COALESCE(de.face_similarity, 0.5) AS sim
+            FROM detection_events de
+            JOIN visitors vis ON vis.id = de.visitor_id
+            WHERE de.detected_at >= :since AND de.detected_at < :until
+              AND vis.is_staff = FALSE AND vis.is_active = TRUE
+              AND COALESCE(de.face_similarity, 0) >= :min_conf
+              AND de.is_ambiguous = FALSE
+        ),
+        per_visitor AS (
+            SELECT visitor_id, MAX(sim) AS max_sim
+            FROM weighted
+            GROUP BY visitor_id
+        )
+        SELECT
+            COUNT(*) AS unique_count,
+            COALESCE(SUM(max_sim), 0) AS effective_unique,
+            COALESCE(AVG(max_sim), 0) AS avg_confidence
+        FROM per_visitor
+    """), params)).one()
+
+    # Also pull raw numbers for comparison
+    raw = await summary(db, since, until)
+    raw["confidence_weighted"] = {
+        "unique_visitors": int(row.unique_count or 0),
+        "effective_unique": round(float(row.effective_unique or 0), 1),
+        "avg_confidence": round(float(row.avg_confidence or 0), 4),
+        "min_confidence_filter": min_confidence,
+    }
+    return raw
+
+
+async def detection_quality_report(
+    db: AsyncSession,
+    since: Optional[datetime],
+    until: Optional[datetime],
+) -> dict:
+    """
+    Breakdown of detection quality bands to surface systematic issues.
+    Bands: high (≥0.65), medium (0.45–0.65), low (<0.45 or null).
+    """
+    since, until = _range(since, until)
+    rows = (await db.execute(text("""
+        SELECT
+            CASE
+                WHEN face_similarity >= 0.65 THEN 'high'
+                WHEN face_similarity >= 0.45 THEN 'medium'
+                ELSE 'low'
+            END AS band,
+            COUNT(*) AS n
+        FROM detection_events
+        WHERE detected_at >= :since AND detected_at < :until
+          AND is_ambiguous = FALSE
+        GROUP BY band
+    """), {"since": since, "until": until})).all()
+
+    bands = {"high": 0, "medium": 0, "low": 0}
+    for r in rows:
+        bands[r.band] = r.n
+    total = sum(bands.values()) or 1
+    return {
+        "bands": bands,
+        "pct_high": round(bands["high"] / total, 4),
+        "pct_medium": round(bands["medium"] / total, 4),
+        "pct_low": round(bands["low"] / total, 4),
+        "total_detections": total,
+    }

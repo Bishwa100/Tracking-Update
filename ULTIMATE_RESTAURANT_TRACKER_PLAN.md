@@ -12,14 +12,24 @@
 
 **Status (2026-06-16):** Backend implemented in place **and** the full 7-page
 Next.js dashboard is built (`dashboard/`, builds cleanly). Neither has had a live
-end-to-end run yet (heavy backend deps weren't installed in the build env). Two
+end-to-end run yet (heavy backend deps weren't installed in the build env). Four
 backend endpoints were added beyond the original API list for the dashboard:
-`GET /api/activity` (detection-event feed) and `GET /api/settings` (read-only
-config). The dashboard reaches the backend through a same-origin server-side
+`GET /api/activity` (detection-event feed), `GET /api/settings` (read-only
+config), `POST /api/camera/roi` and `GET /api/camera/roi` (optional region-of-interest
+filtering). The dashboard reaches the backend through a same-origin server-side
 proxy so the API key never reaches the browser; the live feed is a direct
 WebSocket. shadcn/ui was replaced with lightweight Tailwind components (no
 generator step), and the Settings page is read-only (settings are env-driven).
 All app ports are in 3001–3010: dashboard 3003, backend 3001, pgAdmin 3002, PostgreSQL 3004.
+
+Additional items implemented but not originally listed: a `test_camera.py` utility
+(Windows camera index detector), a `dashboard/README.md` (separate frontend setup
+guide), `dashboard/.env.local.example` (frontend env template), a
+`dashboard/Dockerfile` (containerized Next.js build), hard-delete support on
+`DELETE /api/visitors/{id}?hard=true`, a timing middleware (`X-Process-Time-Ms`
+header on every response), CORS middleware disabled (comment notes WebSocket
+compatibility reason), and `is_ambiguous` persisted as a column in
+`detection_events` so the Activity page can filter on it.
 
 The backend was built by **transforming the existing SPVS codebase in place**
 rather than copying modules into a new `restaurant-tracker/` tree. Student /
@@ -301,8 +311,10 @@ CREATE TABLE detection_events (
     combined_confidence FLOAT,
 
     is_new_visitor BOOLEAN NOT NULL,
+    is_ambiguous BOOLEAN NOT NULL DEFAULT FALSE,  -- Stored so Activity page can filter
     match_source TEXT,                    -- "face" | "body" | "none"
 
+    camera_id TEXT,
     frame_path TEXT,
     bbox JSONB,
 
@@ -647,7 +659,7 @@ POST /api/detect:
 
 ```yaml
 POST /api/camera/start:
-  body: { source: "0" }          # "0" = webcam, "rtsp://..." = IP cam
+  body: { source: "0", camera_id: "cam-0", fps: 1.0 }   # "0" = webcam, "rtsp://..." = IP cam
   response: { status: "started", source: "0" }
 
 POST /api/camera/stop:
@@ -657,15 +669,30 @@ GET /api/camera/status:
   response:
     is_running: bool
     source: str
+    camera_id: str
+    fps: float
     frames_processed: int
+    frames_skipped: int
     persons_detected: int
+    new_visitors: int
+    returning_visitors: int
     uptime_seconds: int
+    last_error: str | null
 
 GET /api/camera/snapshot:
-  response: image/jpeg            # Latest frame as JPEG
+  response: image/jpeg            # Latest annotated (or raw) frame as JPEG
+
+POST /api/camera/roi:             # NEW — Region of Interest filter
+  body: { x: int, y: int, width: int, height: int }
+  response: { roi: {...} }
+
+GET /api/camera/roi:              # NEW — Read current ROI
+  response: { roi: {...} | null }
 
 WebSocket /ws/live-feed:
-  description: Streams annotated frames as base64 JPEG for real-time UI
+  description: Streams annotated frames + live stats every frame interval
+  payload: { type: "frame", frame: "data:image/jpeg;base64,...",
+             is_running: bool, currently_inside: int, stats: {...} }
 ```
 
 ### 8.3 Visitors
@@ -677,10 +704,11 @@ GET /api/visitors:
     total: int
     visitors:
       - id, name, visit_count, first_seen_at, last_seen_at,
-        is_staff, thumbnail_url, avg_confidence
+        is_staff, thumbnail_url, avg_confidence, best_face_det_score,
+        is_active, total_faces_recorded
 
 GET /api/visitors/{id}:
-  response: Full visitor detail + latest visit summary
+  response: Full visitor detail + latest visit summary (VisitorDetailResponse)
 
 GET /api/visitors/{id}/visits:
   query: { limit, offset, since, until }
@@ -691,7 +719,8 @@ PUT /api/visitors/{id}:
   response: Updated visitor
 
 DELETE /api/visitors/{id}:
-  response: { success: true }     # Soft delete (is_active = false)
+  query: { hard: bool }           # hard=false (default) = soft delete (is_active=false)
+  response: { success: true }     # hard=true = permanent delete (removes all faces/visits)
 
 GET /api/visitors/{id}/thumbnail:
   response: image/jpeg
@@ -704,7 +733,8 @@ GET /api/analytics/summary:
   query: { since, until }
   response:
     total_unique_visitors, total_visits, new_visitors, returning_visitors,
-    average_duration_minutes, peak_hour, visits_by_day[]
+    average_duration_minutes, return_rate, visits_by_day[]
+    # NOTE: peak_hour removed; return_rate (float 0–1) added
 
 GET /api/analytics/frequency:
   response:
@@ -724,7 +754,7 @@ GET /api/analytics/top-visitors:
 
 ```yaml
 POST /api/admin/visitors/{id}/merge:
-  body: { target_visitor_id: UUID }     # Merge INTO this visitor
+  body: { target_visitor_id: UUID }     # Merge INTO this visitor (re-points all visits/faces/events)
   response: { success, merged_visits }
 
 POST /api/admin/visitors/{id}/mark-staff:
@@ -734,10 +764,47 @@ GET /api/health:
   response:
     status: "ok" | "degraded"
     models_loaded: bool
+    yolo_loaded: bool
+    arcface_loaded: bool
+    body_model: str | null
     db_connected: bool
     camera_running: bool
     visitors_count: int
     total_visits: int
+```
+
+### 8.6 Activity Feed (Added for Dashboard)
+
+```yaml
+GET /api/activity:
+  query: { limit, since, event_type: "new"|"returning"|"ambiguous" }
+  response:
+    events:
+      - id, detected_at, visitor_id, visitor_name, thumbnail_url,
+        visit_id, face_similarity, body_similarity, is_new_visitor,
+        is_ambiguous, match_source, camera_id
+```
+
+### 8.7 Settings (Added for Dashboard)
+
+```yaml
+GET /api/settings:
+  description: Read-only reflection of active backend configuration (all env vars)
+  response: SettingsResponse — all thresholds, visit params, gallery params,
+            camera params, privacy params. No mutations (config is env-driven).
+```
+
+### 8.8 Middleware
+
+```yaml
+X-Process-Time-Ms:
+  description: Response header on every endpoint showing server processing time in ms
+  reason: Performance observability without external tooling
+
+CORS:
+  description: Middleware is disabled (commented out) for WebSocket compatibility.
+  note: In production, configure a reverse proxy (nginx) to enforce CORS rather
+        than relying on FastAPI middleware, which breaks WS upgrade handshakes.
 ```
 
 ---
@@ -748,11 +815,12 @@ GET /api/health:
 
 | Choice | Reason |
 |---|---|
-| **Next.js 14** (App Router) | SSR for fast page loads, API routes if needed |
+| **Next.js 14** (App Router) | SSR for fast page loads; API routes used for backend proxy |
 | **TailwindCSS v3** | Rapid styling with dark mode support |
 | **Recharts** | Lightweight charts (bar, line, area, pie) |
 | **Lucide Icons** | Clean, modern icon set |
-| **shadcn/ui** | Pre-built accessible components (tables, cards, dialogs) |
+| **SWR** | Data fetching with automatic revalidation and stale-while-revalidate |
+| ~~shadcn/ui~~ → **Lightweight Tailwind components** | shadcn/ui replaced with hand-written Card, Button, Select, Input in `components/ui.tsx` — no generator step required |
 
 ### 9.2 Design System
 
@@ -1028,6 +1096,7 @@ Chronological event log for debugging and auditing.
 │  │  Max Frame Size: [1280] px          │  │                      │  │
 │  │                                     │  │  [🟢 Start] [🔴 Stop]│  │
 │  │  Frame Dedup: [✓ Enabled]           │  │                      │  │
+│  │  ROI: [x] [y] [w] [h]  [Set ROI]   │  │  (optional focus zone│  │
 │  └─────────────────────────────────────┘  └──────────────────────┘  │
 │                                                                      │
 │  ┌──────────────────────────────────────────────────────────────┐   │
@@ -1182,15 +1251,20 @@ Sidebar (always visible):
 - [ ] Test analytics accuracy with synthetic data
 
 ### Phase 5: Dashboard UI ✅ (done — builds cleanly, not yet run against a live backend)
-- [x] Set up Next.js 14 + TailwindCSS (+ Recharts, lucide-react, SWR; shadcn/ui replaced by lightweight Tailwind components)
-- [x] Server-side proxy (`/api/backend/*`) so the API key stays off the client
+- [x] Set up Next.js 14 + TailwindCSS (+ Recharts, lucide-react, SWR; shadcn/ui replaced by lightweight Tailwind components in `components/ui.tsx`)
+- [x] Server-side proxy (`/api/backend/[...path]/route.ts`) so the API key stays off the client
+- [x] SWR data fetching with stale-while-revalidate + per-page refresh intervals
+- [x] TypeScript interfaces for all API responses (`lib/types.ts`) + formatting utilities (`lib/format.ts`)
 - [x] Page 1: Live Monitor (WebSocket feed + stats + activity)
 - [x] Page 2: Visitor Directory (table + search + filters + pagination)
 - [x] Page 3: Visitor Profile (detail + monthly chart + history + edit/merge/delete)
 - [x] Page 4: Analytics Dashboard (area/donut/stacked-bar/frequency + date range + top regulars)
 - [x] Page 5: Activity Timeline (filter + auto-refresh)
-- [x] Page 6: Camera Management (start/stop/status/snapshot)
+- [x] Page 6: Camera Management (start/stop/status/snapshot + ROI configuration)
 - [x] Page 7: Settings (read-only — backend config is env-driven)
+- [x] `dashboard/Dockerfile` for containerized Next.js build
+- [x] `dashboard/.env.local.example` (NEXT_PUBLIC_BACKEND_URL, NEXT_PUBLIC_WS_URL)
+- [x] `dashboard/README.md` (separate frontend setup and development guide)
 
 ### Phase 6: Polish & Testing (Week 4)
 - [ ] End-to-end testing with webcam
@@ -1206,52 +1280,93 @@ Sidebar (always visible):
 **As built (in place — no separate `restaurant-tracker/` root):**
 
 ```
-D:\Person-Tracking\
+Person-Tracking-main/
 ├── backend/
 │   ├── app/
 │   │   ├── __init__.py
-│   │   ├── main.py                          # App, lifespan, routers, health, bg tasks
-│   │   ├── config.py                        # Restaurant settings (pydantic-settings)
-│   │   ├── database.py                      # Async SQLAlchemy engine + session
+│   │   ├── main.py                          # App, lifespan, routers, health, bg tasks,
+│   │   │                                    # timing middleware (X-Process-Time-Ms)
+│   │   ├── config.py                        # Restaurant settings (pydantic-settings, 60+ vars)
+│   │   ├── database.py                      # Async SQLAlchemy engine + session + pgvector init
 │   │   ├── models.py                        # Visitor, VisitorFace, Visit, DetectionEvent
-│   │   ├── schemas.py                       # Pydantic request/response models
-│   │   ├── ml_models.py                     # ModelManager (YOLO + ArcFace + OSNet)
-│   │   ├── cv_pipeline.py                   # process_frame() (YOLO→ArcFace→OSNet)
-│   │   ├── osnet.py                         # OSNet x0.25 architecture
+│   │   ├── schemas.py                       # 20+ Pydantic request/response models
+│   │   ├── ml_models.py                     # ModelManager singleton (YOLO + ArcFace + OSNet)
+│   │   ├── cv_pipeline.py                   # process_frame(), DetectedPerson dataclass
+│   │   ├── osnet.py                         # OSNet x0.25 architecture (vendored)
 │   │   ├── utils.py                         # Frame dedup, media, annotation, run_inference
 │   │   │
 │   │   ├── services/
 │   │   │   ├── __init__.py
-│   │   │   ├── identity_resolver.py         # NEW vs RETURNING (HNSW + ambiguity gate)
+│   │   │   ├── identity_resolver.py         # NEW vs RETURNING (HNSW batched + ambiguity gate)
 │   │   │   ├── auto_enroller.py             # Gallery management + adaptive centroid
-│   │   │   ├── visit_tracker.py             # In-memory session state machine + recovery
+│   │   │   ├── visit_tracker.py             # In-memory session state machine + DB recovery
 │   │   │   ├── detection_pipeline.py        # Shared resolve→enroll→track→audit
-│   │   │   ├── camera_service.py            # Webcam/RTSP/file processing loop
+│   │   │   ├── camera_service.py            # Webcam/RTSP/file processing loop + ROI support
 │   │   │   └── analytics_service.py         # Analytics query builders
 │   │   │
 │   │   └── api/
 │   │       ├── __init__.py                  # verify_api_key dependency
 │   │       ├── detect.py                    # POST /api/detect (image/video upload)
 │   │       ├── visitors.py                  # Visitor CRUD + visit history + thumbnail
+│   │       │                                # DELETE supports ?hard=true for permanent removal
 │   │       ├── analytics.py                 # Analytics endpoints
-│   │       ├── camera.py                    # Camera control endpoints
+│   │       ├── camera.py                    # Camera control + ROI endpoints
 │   │       ├── admin.py                     # Merge, staff marking
+│   │       ├── activity.py                  # GET /api/activity (detection event timeline)
+│   │       ├── settings.py                  # GET /api/settings (read-only config reflection)
 │   │       └── websocket.py                 # WebSocket /ws/live-feed
 │   │
-│   ├── alembic/versions/001_restaurant_schema.py
+│   ├── alembic/
+│   │   ├── env.py                           # Migration env (auto-detects models)
+│   │   └── versions/
+│   │       └── 001_restaurant_schema.py     # Drops SPVS tables, creates 4 restaurant tables
 │   ├── storage/                             # (runtime, gitignored)
 │   │   ├── visitor_photos/                  # Saved face thumbnails
 │   │   └── tmp_detect/                      # Temp files for uploaded media
-│   ├── Dockerfile
-│   ├── requirements.txt
+│   ├── Dockerfile                           # Multi-stage: Python 3.11, CPU PyTorch, single worker
+│   ├── requirements.txt                     # 26 deps (FastAPI, SQLAlchemy, asyncpg, pgvector,
+│   │                                        # ultralytics, insightface, onnxruntime, cv2, Pillow)
 │   └── alembic.ini
 │
-├── dashboard/                               # Next.js UI — PENDING (see §9)
+├── dashboard/                               # Next.js 14 UI
+│   ├── app/
+│   │   ├── layout.tsx                       # Root layout: sidebar nav, global dark theme
+│   │   ├── page.tsx                         # Live Monitor (WebSocket + stats + activity)
+│   │   ├── visitors/
+│   │   │   ├── page.tsx                     # Visitor Directory (table + search + pagination)
+│   │   │   └── [id]/page.tsx               # Visitor Profile (detail + chart + history)
+│   │   ├── analytics/page.tsx               # Analytics Dashboard (area/donut/stacked-bar)
+│   │   ├── activity/page.tsx                # Activity Timeline (filter + auto-refresh)
+│   │   ├── camera/page.tsx                  # Camera Management (start/stop/snapshot/ROI)
+│   │   ├── settings/page.tsx                # Settings (read-only config display)
+│   │   └── api/backend/[...path]/route.ts   # Server-side proxy (keeps API key off browser)
+│   ├── components/
+│   │   ├── sidebar.tsx                      # Navigation + system status indicators
+│   │   ├── live-feed.tsx                    # WebSocket consumer, base64 frame decoder
+│   │   ├── activity-feed.tsx                # Event list with thumbnails + timestamps
+│   │   ├── visitor-table.tsx                # Searchable/sortable table with pagination
+│   │   ├── charts.tsx                       # Recharts wrappers: Area, Donut, Bar
+│   │   ├── stat-card.tsx                    # KPI card with icon/tone theming
+│   │   └── ui.tsx                           # Lightweight: Card, Button, Select, Input
+│   ├── lib/
+│   │   ├── api.ts                           # SWR fetcher + API URL builder
+│   │   ├── types.ts                         # TypeScript interfaces for all API responses
+│   │   └── format.ts                        # Relative time + duration formatting helpers
+│   ├── Dockerfile                           # Containerized Next.js build
+│   ├── package.json                         # next 14, react 18, recharts, swr, lucide-react,
+│   │                                        # tailwindcss (NO shadcn/ui)
+│   ├── tailwind.config.ts                   # Dark mode, custom slate palette
+│   ├── tsconfig.json                        # Path aliases (@/)
+│   ├── .env.local.example                   # NEXT_PUBLIC_BACKEND_URL, NEXT_PUBLIC_WS_URL
+│   └── README.md                            # Dashboard setup & development guide
 │
-├── docker-compose.yml
-├── init-db.sql
-├── .env.example
-└── README.md
+├── docker-compose.yml                       # postgres + pgadmin + backend + dashboard
+│                                            # (4 services; ports 3001–3004)
+├── init-db.sql                              # pgvector extension enablement
+├── .env.example                             # All backend env vars (template)
+├── .gitignore                               # Excludes storage/, .env, face crops
+├── test_camera.py                           # Windows utility: find available camera indices
+└── README.md                                # Project overview + quick start
 ```
 
 ---
@@ -1337,11 +1452,20 @@ ANALYTICS_DEFAULT_DAYS = 30
 | ✅ Count visit frequency | Visit session tracker + visit_count |
 | ✅ Track visit timestamps & duration | Visit table with enter/leave/duration |
 | ✅ Handle ambiguous matches | Ambiguity margin + body fallback + skip |
-| ✅ Body fallback when face obscured | OSNet 512-d as secondary signal |
+| ✅ Body fallback when face obscured | OSNet 512-d as secondary signal (same-session only) |
 | ✅ Self-improving recognition | Multi-embedding gallery + adaptive centroid |
 | ✅ Webcam support for testing | CameraService with cv2.VideoCapture(0) |
 | ✅ CPU-optimized | ONNX YOLO, 1 FPS, frame dedup, inference semaphore |
 | ✅ Full dashboard UI | 7-page Next.js dashboard with live feed + charts |
-| ✅ Analytics & business insights | Summary, frequency, hourly, top visitors |
-| ✅ Admin tools | Merge duplicates, mark staff, edit names |
+| ✅ Analytics & business insights | Summary, frequency, hourly, top visitors + return_rate |
+| ✅ Admin tools | Merge duplicates, mark staff, edit names, hard/soft delete |
 | ✅ Scalable to millions | HNSW indexes, gallery pruning, table partitioning |
+| ✅ Detection audit trail | `detection_events` table with is_ambiguous, match_source |
+| ✅ Activity timeline page | `/api/activity` feed + Activity page (filter by type) |
+| ✅ Configuration transparency | `/api/settings` read-only endpoint + Settings page |
+| ✅ Region-of-interest support | ROI filter via `POST /api/camera/roi` |
+| ✅ Privacy / retention | VISITOR_RETENTION_DAYS purge job + .gitignore of crops |
+| ✅ Performance observability | X-Process-Time-Ms header on every response |
+| ✅ Containerized deployment | Docker Compose: 4 services (postgres, pgadmin, backend, dashboard) |
+| ✅ Frontend type safety | TypeScript interfaces for all API contracts (`lib/types.ts`) |
+| ✅ Camera index discovery | `test_camera.py` utility for Windows webcam enumeration |

@@ -161,6 +161,59 @@ class Settings(BaseSettings):
     # ── Analytics ────────────────────────────────────────────
     ANALYTICS_DEFAULT_DAYS: int = 30
 
+    # ── Face preprocessing (CLAHE + gamma) ──────────────────
+    FACE_PREPROCESSING_CLAHE: bool = True
+    FACE_PREPROCESSING_GAMMA: bool = True
+    CLAHE_CLIP_LIMIT: float = 2.0
+    CLAHE_GRID_SIZE: List[int] = [8, 8]
+
+    # ── Pose-aware gallery ───────────────────────────────────
+    POSE_AWARE_GALLERY: bool = True
+    MIN_FACES_PER_POSE_BIN: int = 2
+    MAX_FACES_PER_POSE_BIN: int = 4
+
+    # ── Mask detection ───────────────────────────────────────
+    MASK_DETECTION_ENABLED: bool = True
+    MASKED_FACE_THRESHOLD_OFFSET: float = -0.05
+
+    # ── Temporal consistency gate ────────────────────────────
+    TEMPORAL_WINDOW_SECONDS: float = 30.0
+    TEMPORAL_MAX_PIXEL_DISTANCE: float = 150.0
+    TEMPORAL_MIN_SIMILARITY: float = 0.50
+
+    # ── Smart / seated cooldown ──────────────────────────────
+    SEATED_COOLDOWN_MINUTES: int = 45
+
+    # ── Cascade (skip body when face is strong) ──────────────
+    FACE_CONF_SKIP_BODY: float = 0.60
+
+    # ── Redis (for multi-worker visit state) ─────────────────
+    REDIS_ENABLED: bool = False
+    REDIS_URL: str = "redis://localhost:6379/0"
+
+    # ── Consent / privacy ────────────────────────────────────
+    DEFAULT_CONSENT_MODE: str = "implicit"
+    PHYSICAL_NOTICE_REQUIRED: bool = True
+    CONSENT_NOTICE_TEXT: str = (
+        "This premises uses facial recognition for analytics. "
+        "By entering you consent to biometric processing. "
+        "Opt out: ask staff."
+    )
+    CONSENT_QR_URL: str = ""
+    ACTIVE_VISITOR_RETENTION_DAYS: int = 30
+    OPTED_OUT_EMBEDDING_TTL_DAYS: int = 7
+
+    # ── Auto-tuning ──────────────────────────────────────────
+    AUTO_TUNING_ENABLED: bool = True
+    AUTO_TUNING_INTERVAL_DAYS: int = 7
+
+    # ── Monitoring ───────────────────────────────────────────
+    HEALTH_CHECK_INTERVAL_SECONDS: int = 30
+    ALERT_WEBHOOK_URL: str = ""
+
+    # ── Admin API ────────────────────────────────────────────
+    ADMIN_API_KEY: str = ""
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors(cls, v):

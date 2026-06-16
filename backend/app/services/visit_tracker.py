@@ -30,6 +30,14 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _infer_seated(bbox: dict, frame_shape: tuple) -> bool:
+    """Heuristic: person in lower 60% of frame and bbox height < 40% = likely seated."""
+    frame_height = frame_shape[0]
+    y1 = bbox.get("y1", 0)
+    y2 = bbox.get("y2", 0)
+    return y2 > frame_height * 0.6 and (y2 - y1) < frame_height * 0.4
+
+
 @dataclass
 class ActiveVisit:
     visit_id: UUID
@@ -40,6 +48,7 @@ class ActiveVisit:
     best_confidence: float
     sum_confidence: float
     camera_id: Optional[str]
+    was_seated: bool = False  # True → use SEATED_COOLDOWN_MINUTES
 
 
 class VisitTracker:
@@ -80,6 +89,15 @@ class VisitTracker:
                 )
         logger.info("Recovered %d active visit(s) from DB.", len(self.active_visits))
 
+    def _effective_cooldown(self, visit: "ActiveVisit") -> timedelta:
+        """Return the cooldown for this visit (seated = longer)."""
+        minutes = (
+            settings.SEATED_COOLDOWN_MINUTES
+            if visit.was_seated
+            else settings.VISIT_COOLDOWN_MINUTES
+        )
+        return timedelta(minutes=minutes)
+
     async def process_detection(
         self,
         db: AsyncSession,
@@ -87,21 +105,28 @@ class VisitTracker:
         timestamp: datetime,
         confidence: float,
         camera_id: Optional[str] = None,
+        bbox: Optional[dict] = None,
+        frame_shape: Optional[tuple] = None,
     ) -> Tuple[UUID, bool]:
         """
         Record a detection for a visitor. Returns (visit_id, is_new_visit).
         Extends an open visit, or opens a new one (incrementing visit_count).
+        Pass bbox + frame_shape to enable seated-person heuristic.
         """
-        cooldown = timedelta(minutes=settings.VISIT_COOLDOWN_MINUTES)
         max_dur = timedelta(hours=settings.MAX_VISIT_DURATION_HOURS)
 
         async with self._lock:
             active = self.active_visits.get(visitor_id)
             if active is not None:
+                # Update seated status from bounding-box heuristic
+                if bbox and frame_shape:
+                    active.was_seated = active.was_seated or _infer_seated(bbox, frame_shape)
+
+                cooldown = self._effective_cooldown(active)
                 gap = timestamp - active.last_detected_at
                 open_for = timestamp - active.started_at
                 # Cooldown is enforced HERE at detection time (not only by the
-                # background cleanup task) so a return after VISIT_COOLDOWN_MINUTES
+                # background cleanup task) so a return after cooldown minutes
                 # is always counted as a new visit, regardless of cleanup cadence.
                 if gap < cooldown and open_for < max_dur:
                     active.last_detected_at = timestamp
@@ -126,8 +151,8 @@ class VisitTracker:
                     )
                     return active.visit_id, False
 
-                # Gap exceeded the cooldown (or the max-duration cap): close the
-                # stale visit now and fall through to open a fresh one.
+                # Gap exceeded the effective cooldown (or max-duration cap):
+                # close this visit and fall through to open a new one.
                 left_at = active.last_detected_at
                 duration = max(0, int((left_at - active.started_at).total_seconds() // 60))
                 await db.execute(

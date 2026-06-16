@@ -63,6 +63,21 @@ async def _stale_visit_loop():
             logger.warning("Stale-visit cleanup failed: %s", exc)
 
 
+async def _auto_tuning_loop():
+    """Run weekly threshold auto-tuning."""
+    from app.services.auto_tuning import run_auto_tuning
+    interval = settings.AUTO_TUNING_INTERVAL_DAYS * 86400
+    await asyncio.sleep(interval)  # first run after one full interval
+    while True:
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await run_auto_tuning(db)
+                logger.info("Auto-tuning result: %s", result)
+        except Exception as exc:
+            logger.warning("Auto-tuning run failed: %s", exc)
+        await asyncio.sleep(interval)
+
+
 async def _retention_loop():
     """Purge visitors whose last_seen_at is older than the retention window."""
     if settings.VISITOR_RETENTION_DAYS <= 0:
@@ -113,6 +128,30 @@ async def lifespan(app: FastAPI):
     _spawn(_stale_visit_loop())
     _spawn(_retention_loop())
 
+    if settings.AUTO_TUNING_ENABLED:
+        _spawn(_auto_tuning_loop())
+
+    # Load persisted runtime settings from DB (migration 005) if table exists
+    try:
+        from app.api.admin_config import _PATCHABLE
+        async with AsyncSessionLocal() as db:
+            rows = (await db.execute(text("SELECT key, value FROM runtime_settings"))).all()
+            for row in rows:
+                if row.key in _PATCHABLE:
+                    try:
+                        expected_type = type(getattr(settings, row.key))
+                        object.__setattr__(settings, row.key, expected_type(row.value))
+                    except Exception:
+                        pass
+            if rows:
+                logger.info("Loaded %d runtime setting(s) from DB.", len(rows))
+    except Exception:
+        pass  # runtime_settings table may not exist yet
+
+    # Start monitoring background loop
+    from app.monitoring import monitoring_loop
+    _spawn(monitoring_loop(get_db))
+
     if settings.CAMERA_AUTOSTART:
         try:
             await CameraService.get_instance().start()
@@ -160,6 +199,7 @@ async def add_timing(request, call_next):
 from app.api import (  # noqa: E402
     activity,
     admin,
+    admin_config,
     analytics,
     camera,
     detect,
@@ -174,6 +214,7 @@ app.include_router(analytics.router)
 app.include_router(activity.router)
 app.include_router(camera.router)
 app.include_router(admin.router)
+app.include_router(admin_config.router)
 app.include_router(settings_api.router)
 app.include_router(websocket.router)
 

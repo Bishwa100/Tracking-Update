@@ -244,3 +244,61 @@ def draw_detections(image: np.ndarray, annotations: list) -> np.ndarray:
             cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_color, thickness, cv2.LINE_AA,
         )
     return annotated
+
+
+# ── Face preprocessing (CLAHE + gamma) ──────────────────────────────────────
+
+def apply_clahe(face_crop: np.ndarray,
+                clip_limit: float = 2.0,
+                grid_size: tuple = (8, 8)) -> np.ndarray:
+    """
+    CLAHE on the L channel of LAB.
+    Improves recognition under uneven restaurant lighting (~2 ms per 112×112 crop).
+    """
+    if face_crop is None or face_crop.size == 0:
+        return face_crop
+    lab = cv2.cvtColor(face_crop, cv2.COLOR_BGR2LAB)
+    l_ch, a_ch, b_ch = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=grid_size)
+    l_eq = clahe.apply(l_ch)
+    return cv2.cvtColor(cv2.merge([l_eq, a_ch, b_ch]), cv2.COLOR_LAB2BGR)
+
+
+def apply_gamma_correction(image: np.ndarray, gamma: float = None) -> np.ndarray:
+    """
+    Auto-gamma based on mean luminance.  Dark images are brightened, bright
+    images slightly darkened — restores detail lost in restaurant back-lighting.
+    """
+    if image is None or image.size == 0:
+        return image
+    if gamma is None:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        mean_lum = float(np.mean(gray)) / 255.0
+        if mean_lum > 0:
+            gamma = np.log(0.5) / np.log(max(mean_lum, 1e-6))
+        else:
+            gamma = 1.0
+        gamma = float(np.clip(gamma, 0.5, 2.0))
+    inv_gamma = 1.0 / max(gamma, 1e-6)
+    table = np.array(
+        [((i / 255.0) ** inv_gamma) * 255 for i in range(256)], dtype=np.uint8
+    )
+    return cv2.LUT(image, table)
+
+
+def preprocess_face_for_recognition(face_crop: np.ndarray) -> np.ndarray:
+    """
+    Gamma-then-CLAHE preprocessing before ArcFace embedding extraction.
+    Controlled by FACE_PREPROCESSING_GAMMA / FACE_PREPROCESSING_CLAHE settings.
+    The original crop is unchanged (thumbnail still looks natural).
+    """
+    if face_crop is None or face_crop.size == 0:
+        return face_crop
+    result = face_crop.copy()
+    if settings.FACE_PREPROCESSING_GAMMA:
+        result = apply_gamma_correction(result)
+    if settings.FACE_PREPROCESSING_CLAHE:
+        result = apply_clahe(result,
+                             clip_limit=settings.CLAHE_CLIP_LIMIT,
+                             grid_size=tuple(settings.CLAHE_GRID_SIZE))
+    return result

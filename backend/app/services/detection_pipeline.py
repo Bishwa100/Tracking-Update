@@ -19,6 +19,8 @@ from app.cv_pipeline import DetectedPerson
 from app.models import DetectionEvent, Visitor
 from app.services import auto_enroller, identity_resolver
 from app.services.visit_tracker import VisitTracker
+from app.services.temporal_consistency import temporal_gate
+from app.services.mask_detector import is_masked as _is_masked, masked_threshold_offset
 
 logger = logging.getLogger(__name__)
 
@@ -85,13 +87,23 @@ async def process_detections(
     if not matchable:
         return []
 
+    # Mark masked detections and build face dicts for the resolver
+    threshold_offsets: list[float] = []
+    for d in matchable:
+        face_crop = _crop(frame, d.face_bbox or d.bbox)
+        if settings.MASK_DETECTION_ENABLED and face_crop is not None and _is_masked(face_crop):
+            d.is_masked = True
+        threshold_offsets.append(masked_threshold_offset() if d.is_masked else 0.0)
+
     faces = [
         {
             "face_embedding": d.face_embedding,
             "body_embedding": d.body_embedding,
             "det_score": d.face_det_score or 0.0,
+            "pose_bin": d.pose.bin.value if d.pose else "unknown",
+            "threshold_offset": threshold_offsets[i],
         }
-        for d in matchable
+        for i, d in enumerate(matchable)
     ]
     resolutions = await identity_resolver.resolve_batch(faces, db)
 
@@ -125,15 +137,39 @@ async def process_detections(
             continue
 
         if res.is_new:
-            visitor = await auto_enroller.register_new_visitor(
-                db,
-                face_embedding=det.face_embedding,
-                det_score=det_score,
-                body_embedding=det.body_embedding,
-                face_crop=face_crop,
+            # Temporal gate: maybe this is a known person who just turned away
+            temporal_match = temporal_gate.check(
+                new_embedding=det.face_embedding,
+                new_bbox=det.face_bbox or det.bbox,
+                timestamp=timestamp,
             )
-            pd.visitor_id = visitor.id
-            pd.is_new = True
+            if temporal_match is not None:
+                # Treat as returning rather than creating a new record
+                pd.visitor_id = temporal_match
+                pd.is_new = False
+                res.visitor_id = temporal_match
+                res.is_new = False
+                res.match_source = "temporal"
+                visitor = await db.get(Visitor, temporal_match)
+            else:
+                visitor = await auto_enroller.register_new_visitor(
+                    db,
+                    face_embedding=det.face_embedding,
+                    det_score=det_score,
+                    body_embedding=det.body_embedding,
+                    face_crop=face_crop,
+                    pose=det.pose,
+                )
+                pd.visitor_id = visitor.id
+                pd.is_new = True
+                # Flag low-quality or near-duplicate new registrations
+                from app.services.review_queue import maybe_flag_new_visitor
+                await maybe_flag_new_visitor(
+                    db,
+                    visitor_id=visitor.id,
+                    det_score=det_score,
+                    top_similarity=res.face_similarity,
+                )
         elif res.visitor_id is not None:
             pd.visitor_id = res.visitor_id
             visitor = await db.get(Visitor, res.visitor_id)
@@ -146,6 +182,7 @@ async def process_detections(
                     face_similarity=res.face_similarity,
                     body_embedding=det.body_embedding,
                     face_crop=face_crop,
+                    pose=det.pose,
                 )
         else:
             # Dropped (grey zone, low quality) — record nothing identity-bearing.
@@ -160,6 +197,16 @@ async def process_detections(
             camera_id=camera_id,
         )
         pd.visit_id = visit_id
+
+        # Feed confirmed detections into the temporal gate
+        if det.face_embedding:
+            temporal_gate.add_detection(
+                visitor_id=pd.visitor_id,
+                embedding=det.face_embedding,
+                bbox=det.face_bbox or det.bbox,
+                timestamp=timestamp,
+                confidence=det_score,
+            )
 
         db.add(
             DetectionEvent(

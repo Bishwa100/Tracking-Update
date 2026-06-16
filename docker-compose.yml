@@ -17,6 +17,27 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  redis:
+    image: redis:7-alpine
+    container_name: tracker_redis
+    restart: unless-stopped
+    ports:
+      - "3005:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --save ""
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 300m
 
   pgadmin:
     image: dpage/pgadmin4
@@ -45,6 +66,8 @@ services:
       - "3001:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-tracker}:${POSTGRES_PASSWORD:-tracker_pass}@postgres:5432/${POSTGRES_DB:-restaurant_tracker}
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_ENABLED=${REDIS_ENABLED:-false}
     env_file:
       - .env
     volumes:
@@ -58,6 +81,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2g
 
   dashboard:
     build:
@@ -82,4 +111,6 @@ volumes:
   pgdata:
     driver: local
   pgadmindata:
+    driver: local
+  redisdata:
     driver: local

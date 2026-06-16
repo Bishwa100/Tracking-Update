@@ -5,7 +5,8 @@ and returns one DetectedPerson per detected face/person.
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import Enum
 from time import perf_counter
 from typing import List, Optional
 
@@ -19,6 +20,98 @@ from app.utils import normalize_embedding
 logger = logging.getLogger(__name__)
 
 
+def _compute_iou(b1: dict, b2: dict) -> float:
+    """Intersection-over-Union of two {x1,y1,x2,y2} bounding boxes."""
+    ix1 = max(b1["x1"], b2["x1"])
+    iy1 = max(b1["y1"], b2["y1"])
+    ix2 = min(b1["x2"], b2["x2"])
+    iy2 = min(b1["y2"], b2["y2"])
+    inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
+    if inter == 0:
+        return 0.0
+    a1 = max(0.0, b1["x2"] - b1["x1"]) * max(0.0, b1["y2"] - b1["y1"])
+    a2 = max(0.0, b2["x2"] - b2["x1"]) * max(0.0, b2["y2"] - b2["y1"])
+    union = a1 + a2 - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _is_group_frame(persons: List["DetectedPerson"], iou_threshold: float = 0.4) -> bool:
+    """Return True when ≥3 person bboxes have significant pairwise overlap."""
+    if len(persons) < 3:
+        return False
+    overlap = sum(
+        1
+        for i in range(len(persons))
+        for j in range(i + 1, len(persons))
+        if _compute_iou(persons[i].bbox, persons[j].bbox) > iou_threshold
+    )
+    total_pairs = len(persons) * (len(persons) - 1) / 2
+    return (overlap / total_pairs) > 0.3
+
+
+class PoseBin(str, Enum):
+    FRONTAL = "frontal"       # yaw -15° to +15°
+    LEFT_PROFILE = "left"     # yaw -90° to -15°
+    RIGHT_PROFILE = "right"   # yaw +15° to +90°
+    DOWNWARD = "down"         # pitch > 20° (looking at phone/menu)
+    UNKNOWN = "unknown"
+
+
+@dataclass
+class FacePose:
+    yaw: float
+    pitch: float
+    roll: float
+    bin: PoseBin
+
+
+def estimate_pose(face_landmarks: Optional[np.ndarray]) -> FacePose:
+    """
+    Geometric head-pose estimate from 5-point InsightFace landmarks.
+    Landmarks: [left_eye, right_eye, nose, left_mouth, right_mouth]
+    No extra model required — purely landmark geometry.
+    """
+    if face_landmarks is None or len(face_landmarks) < 5:
+        return FacePose(yaw=0.0, pitch=0.0, roll=0.0, bin=PoseBin.UNKNOWN)
+
+    left_eye, right_eye, nose, left_mouth, right_mouth = (
+        np.asarray(face_landmarks[i], dtype=float) for i in range(5)
+    )
+
+    eye_center = (left_eye + right_eye) / 2.0
+    mouth_center = (left_mouth + right_mouth) / 2.0
+    iod = float(np.linalg.norm(right_eye - left_eye))
+    if iod < 1e-6:
+        return FacePose(yaw=0.0, pitch=0.0, roll=0.0, bin=PoseBin.UNKNOWN)
+
+    # Yaw: nose offset from eye-center, normalized by IOD
+    nose_offset_x = (nose[0] - eye_center[0]) / iod
+    yaw = float(-np.degrees(np.arctan2(nose_offset_x, 1.0)) * 1.5)
+
+    # Pitch: vertical nose position relative to eye-mouth midpoint
+    face_mid_y = (eye_center[1] + mouth_center[1]) / 2.0
+    nose_offset_y = (nose[1] - face_mid_y) / iod
+    pitch = float(np.degrees(np.arctan2(nose_offset_y, 1.0)) * 2.0)
+
+    # Roll from eye-line angle
+    roll = float(np.degrees(np.arctan2(
+        right_eye[1] - left_eye[1],
+        right_eye[0] - left_eye[0],
+    )))
+
+    if abs(yaw) <= 15:
+        bin_ = PoseBin.FRONTAL
+    elif yaw < -15:
+        bin_ = PoseBin.LEFT_PROFILE
+    else:
+        bin_ = PoseBin.RIGHT_PROFILE
+
+    if pitch > 20 and bin_ == PoseBin.FRONTAL:
+        bin_ = PoseBin.DOWNWARD
+
+    return FacePose(yaw=yaw, pitch=pitch, roll=roll, bin=bin_)
+
+
 @dataclass
 class DetectedPerson:
     """A single detected person with extracted features."""
@@ -29,6 +122,9 @@ class DetectedPerson:
     face_bbox: Optional[dict] = None
     face_det_score: Optional[float] = None
     has_face: bool = False
+    pose: Optional[FacePose] = None           # head-pose estimate
+    face_landmarks: Optional[np.ndarray] = None  # 5-pt kps for downstream use
+    is_masked: bool = False                   # set by mask detector
 
 
 def face_passes_quality(face: dict) -> bool:
@@ -174,6 +270,14 @@ def process_frame(
                     "x2": face_data["bbox"]["x2"] + x1,
                     "y2": face_data["bbox"]["y2"] + y1,
                 }
+            # Pose estimation from 5-point landmarks (kps key from InsightFace)
+            kps = face_data.get("kps")
+            if kps is not None:
+                kps_arr = np.asarray(kps, dtype=float)
+                detected.face_landmarks = kps_arr
+                detected.pose = estimate_pose(kps_arr)
+            else:
+                detected.pose = FacePose(yaw=0.0, pitch=0.0, roll=0.0, bin=PoseBin.UNKNOWN)
 
         if extract_body and model_mgr.has_body_model:
             body_queue.append((detected, person_crop))
@@ -186,6 +290,9 @@ def process_frame(
         if idx in used_faces:
             continue
         fb = ff["bbox"]
+        kps = ff.get("kps")
+        kps_arr = np.asarray(kps, dtype=float) if kps is not None else None
+        pose = estimate_pose(kps_arr) if kps_arr is not None else FacePose(0.0, 0.0, 0.0, PoseBin.UNKNOWN)
         detected_persons.append(
             DetectedPerson(
                 bbox=fb,
@@ -194,6 +301,8 @@ def process_frame(
                 face_bbox=fb,
                 face_det_score=float(ff["det_score"]),
                 has_face=True,
+                pose=pose,
+                face_landmarks=kps_arr,
             )
         )
 

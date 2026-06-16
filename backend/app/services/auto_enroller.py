@@ -2,9 +2,10 @@
 Auto-enroller + gallery manager.
 
   • New visitor    → create record (centroid = first face) + first gallery face.
-  • Returning      → add face to gallery (top-N by quality) + adaptive centroid.
+  • Returning      → add face to gallery (top-N by quality, pose-aware) + adaptive centroid.
   • Best face crop → saved as the visitor thumbnail.
-  • Gallery diversity → store pose variants (angle/profile) to improve multi-angle recognition.
+  • Pose-aware gallery → up to MAX_FACES_PER_POSE_BIN faces per pose bin;
+    underrepresented bins can evict overrepresented ones.
 """
 
 import logging
@@ -20,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models import Visitor, VisitorFace
 from app.utils import normalize_embedding
+from app.cv_pipeline import PoseBin, FacePose
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +47,7 @@ async def register_new_visitor(
     det_score: float,
     body_embedding: Optional[list] = None,
     face_crop: Optional[np.ndarray] = None,
+    pose: Optional[FacePose] = None,
 ) -> Visitor:
     """Create a new visitor with the first face seeding both centroid and gallery."""
     visitor = Visitor(
@@ -54,16 +57,20 @@ async def register_new_visitor(
         visit_count=0,
         best_face_det_score=det_score,
         total_faces_recorded=1,
+        consent_status="implicit",
+        visit_confidence=0.3,
     )
     db.add(visitor)
     await db.flush()  # assign PK / make it queryable in this tx
 
+    pose_bin = pose.bin.value if pose else "unknown"
     db.add(
         VisitorFace(
             visitor_id=visitor.id,
             embedding=face_embedding,
             det_score=det_score,
             body_embedding=body_embedding,
+            pose_bin=pose_bin,
         )
     )
 
@@ -71,8 +78,16 @@ async def register_new_visitor(
     if thumb:
         visitor.thumbnail_path = thumb
 
-    logger.info("Registered new visitor %s (det_score=%.3f).", visitor.id, det_score)
+    logger.info(
+        "Registered new visitor %s (det_score=%.3f, pose=%s).",
+        visitor.id, det_score, pose_bin,
+    )
     return visitor
+
+
+# Per-bin gallery limits for pose diversity
+_MIN_PER_BIN = 2
+_MAX_PER_BIN = 4
 
 
 async def add_face_to_gallery(
@@ -81,43 +96,92 @@ async def add_face_to_gallery(
     embedding: list,
     det_score: float,
     body_embedding: Optional[list] = None,
+    pose: Optional[FacePose] = None,
 ) -> None:
-    """Insert a face, evicting the lowest-quality one when the gallery is full."""
-    count = await db.scalar(
-        select(func.count(VisitorFace.id)).where(VisitorFace.visitor_id == visitor_id)
-    )
+    """
+    Insert a face using pose-aware eviction policy.
+    Enforces diversity across pose bins (frontal / left / right / down).
+    """
+    bin_name = pose.bin.value if pose else "unknown"
 
-    if (count or 0) < settings.MAX_FACES_PER_VISITOR:
-        db.add(
-            VisitorFace(
+    rows = (
+        await db.execute(
+            select(VisitorFace).where(VisitorFace.visitor_id == visitor_id)
+        )
+    ).scalars().all()
+
+    total = len(rows)
+
+    # Count faces already in each bin
+    bin_counts: dict[str, list[VisitorFace]] = {}
+    for f in rows:
+        b = f.pose_bin or "unknown"
+        bin_counts.setdefault(b, []).append(f)
+
+    current_bin_faces = bin_counts.get(bin_name, [])
+    current_bin_count = len(current_bin_faces)
+
+    if total < settings.MAX_FACES_PER_VISITOR:
+        # Gallery has room — add if this bin isn't over its cap
+        if current_bin_count < _MAX_PER_BIN:
+            db.add(VisitorFace(
                 visitor_id=visitor_id,
                 embedding=embedding,
                 det_score=det_score,
                 body_embedding=body_embedding,
-            )
-        )
+                pose_bin=bin_name,
+            ))
         return
 
-    # Gallery full: find the worst (lowest det_score, oldest on tie).
-    worst = (
-        await db.execute(
-            select(VisitorFace)
-            .where(VisitorFace.visitor_id == visitor_id)
-            .order_by(VisitorFace.det_score.asc(), VisitorFace.created_at.asc())
-            .limit(1)
-        )
-    ).scalar_one_or_none()
-
-    if worst is not None and det_score > (worst.det_score or 0.0):
-        await db.delete(worst)
-        db.add(
-            VisitorFace(
+    # Gallery is full — smart eviction
+    if current_bin_count < _MIN_PER_BIN:
+        # This bin is underrepresented; evict worst from most overcrowded bin
+        worst = _find_eviction_candidate(rows, bin_counts, bin_name)
+        if worst is not None and det_score > worst.det_score * 0.9:
+            await db.delete(worst)
+            db.add(VisitorFace(
                 visitor_id=visitor_id,
                 embedding=embedding,
                 det_score=det_score,
                 body_embedding=body_embedding,
-            )
+                pose_bin=bin_name,
+            ))
+    else:
+        # Bin already has enough faces — only replace worst-quality in same bin
+        worst_in_bin = (
+            min(current_bin_faces, key=lambda f: (f.det_score or 0.0))
+            if current_bin_faces else None
         )
+        if worst_in_bin is not None and det_score > (worst_in_bin.det_score or 0.0):
+            await db.delete(worst_in_bin)
+            db.add(VisitorFace(
+                visitor_id=visitor_id,
+                embedding=embedding,
+                det_score=det_score,
+                body_embedding=body_embedding,
+                pose_bin=bin_name,
+            ))
+
+
+def _find_eviction_candidate(
+    all_faces: list,
+    bin_counts: dict,
+    target_bin: str,
+) -> Optional[VisitorFace]:
+    """Return the lowest-quality face from the most over-represented bin."""
+    overcrowded = [
+        (b, faces)
+        for b, faces in bin_counts.items()
+        if b != target_bin and len(faces) > _MAX_PER_BIN
+    ]
+    if overcrowded:
+        _, candidates = max(overcrowded, key=lambda x: len(x[1]))
+    else:
+        # No bin is overcrowded — evict global worst
+        candidates = all_faces
+    if not candidates:
+        return None
+    return min(candidates, key=lambda f: (f.det_score or 0.0))
 
 
 async def update_centroid(
@@ -181,6 +245,7 @@ async def update_after_match(
     face_similarity: float,
     body_embedding: Optional[list] = None,
     face_crop: Optional[np.ndarray] = None,
+    pose: Optional[FacePose] = None,
 ) -> None:
     """
     Self-improvement on a confident returning match: grow the gallery, refresh
@@ -197,14 +262,14 @@ async def update_after_match(
 
     if face_similarity >= settings.STRONG_MATCH_THRESHOLD:
         await add_face_to_gallery(
-            db, visitor.id, face_embedding, det_score, body_embedding
+            db, visitor.id, face_embedding, det_score, body_embedding, pose=pose
         )
         await update_centroid(db, visitor, face_embedding, det_score)
         added_to_gallery = True
     elif face_similarity >= settings.RETURNING_FACE_THRESHOLD:
         if await _is_diverse_embedding(db, visitor.id, face_embedding):
             await add_face_to_gallery(
-                db, visitor.id, face_embedding, det_score, body_embedding
+                db, visitor.id, face_embedding, det_score, body_embedding, pose=pose
             )
             added_to_gallery = True
 
