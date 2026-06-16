@@ -132,6 +132,60 @@ export function MonthlyBar({ data }: { data: { label: string; value: number }[] 
   );
 }
 
+export function DetectionQualityBar({
+  high,
+  medium,
+  low,
+}: {
+  high: number;
+  medium: number;
+  low: number;
+}) {
+  const total = high + medium + low;
+  if (total === 0) {
+    return (
+      <div className="flex h-[120px] items-center justify-center text-sm text-text-secondary">
+        No detections in range
+      </div>
+    );
+  }
+  const seg = [
+    { label: "High", value: high, color: "#10B981" },
+    { label: "Medium", value: medium, color: "#F59E0B" },
+    { label: "Low", value: low, color: "#EF4444" },
+  ];
+  return (
+    <div className="space-y-4 py-2">
+      <div className="flex h-4 w-full overflow-hidden rounded-full bg-card/40">
+        {seg.map((s) => (
+          <div
+            key={s.label}
+            style={{ width: `${(s.value / total) * 100}%`, backgroundColor: s.color }}
+            className="h-full transition-all"
+          />
+        ))}
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {seg.map((s) => (
+          <div key={s.label} className="text-center">
+            <div className="flex items-center justify-center gap-1.5 text-xs text-text-secondary">
+              <span
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: s.color }}
+              />
+              {s.label}
+            </div>
+            <p className="mt-1 text-lg font-semibold text-text-primary">
+              {Math.round((s.value / total) * 100)}%
+            </p>
+            <p className="text-[11px] text-text-muted">{s.value.toLocaleString()}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function FrequencyBar({ data }: { data: { bucket: string; count: number }[] }) {
   return (
     <ResponsiveContainer width="100%" height={240}>

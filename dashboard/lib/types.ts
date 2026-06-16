@@ -50,6 +50,10 @@ export interface VisitorDetail extends VisitorSummary {
   notes: string | null;
   total_faces_recorded: number;
   latest_visit: VisitSummary | null;
+  consent_status?: string | null;
+  consent_at?: string | null;
+  consent_method?: string | null;
+  opted_out_at?: string | null;
 }
 
 export interface VisitListResponse {
@@ -60,6 +64,8 @@ export interface VisitListResponse {
 export interface CameraStatus {
   is_running: boolean;
   source: string | null;
+  source_kind?: "video" | "camera" | null;
+  looping?: boolean;
   camera_id: string | null;
   fps: number | null;
   frames_processed: number;
@@ -165,6 +171,46 @@ export interface DetectResponse {
   new_visitors_count: number;
   returning_visitors_count: number;
   frames_processed: number;
+}
+
+// ── New backend capabilities ────────────────────────────────
+
+export interface ReviewFlag {
+  id: string;
+  visitor_id: string;
+  flag_type: string;
+  detail: string;
+  created_at: string | null;
+}
+
+export interface ConfidenceWeighted {
+  unique_visitors: number;
+  effective_unique: number;
+  avg_confidence: number;
+  min_confidence_filter: number;
+}
+
+export interface ConfidenceWeightedSummary extends AnalyticsSummary {
+  confidence_weighted: ConfidenceWeighted;
+}
+
+export interface DetectionQuality {
+  bands: { high: number; medium: number; low: number };
+  pct_high: number;
+  pct_medium: number;
+  pct_low: number;
+  total_detections: number;
+}
+
+// Runtime-editable admin settings (from GET/PATCH /api/admin/settings).
+export type AdminSettings = Record<string, number | boolean | string>;
+
+export interface VideoStreamResponse {
+  status: string;
+  filename: string;
+  source: string;
+  size_mb: number;
+  looping: boolean;
 }
 
 export interface LiveFeedMessage {

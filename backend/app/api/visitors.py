@@ -1,7 +1,7 @@
 """Visitor CRUD + visit history endpoints."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from uuid import UUID
@@ -15,6 +15,7 @@ from app.api import verify_api_key
 from app.database import get_db
 from app.models import Visit, Visitor
 from app.schemas import (
+    ConsentUpdateRequest,
     VisitListResponse,
     VisitorDetailResponse,
     VisitorListResponse,
@@ -133,6 +134,10 @@ async def get_visitor(
         total_faces_recorded=visitor.total_faces_recorded or 0,
         thumbnail_url=_thumbnail_url(visitor),
         latest_visit=_visit_summary(latest) if latest else None,
+        consent_status=getattr(visitor, "consent_status", None),
+        consent_at=getattr(visitor, "consent_at", None),
+        consent_method=getattr(visitor, "consent_method", None),
+        opted_out_at=getattr(visitor, "opted_out_at", None),
     )
 
 
@@ -177,6 +182,47 @@ async def update_visitor(
     if request.is_staff is not None:
         visitor.is_staff = request.is_staff
     await db.commit()
+    return await get_visitor(visitor_id, db, _key)
+
+
+@router.post("/{visitor_id}/consent", response_model=VisitorDetailResponse)
+async def update_consent(
+    visitor_id: UUID,
+    request: ConsentUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    _key: str = Security(verify_api_key),
+):
+    """
+    Set a visitor's consent status. Opting out stops them being matched (the
+    identity resolver excludes consent_status='opted_out') and clears their
+    entries from the temporal-consistency gate immediately. Their embeddings are
+    purged by the retention job after OPTED_OUT_EMBEDDING_TTL_DAYS.
+    """
+    valid = {"implicit", "explicit", "opted_out"}
+    if request.consent_status not in valid:
+        raise HTTPException(status_code=400, detail=f"consent_status must be one of {valid}.")
+
+    visitor = await db.get(Visitor, visitor_id)
+    if visitor is None or not visitor.is_active:
+        raise HTTPException(status_code=404, detail="Visitor not found.")
+
+    now = datetime.now(timezone.utc)
+    visitor.consent_status = request.consent_status
+    visitor.consent_method = request.method
+    if request.consent_status == "opted_out":
+        visitor.opted_out_at = now
+    else:
+        visitor.consent_at = now
+        visitor.opted_out_at = None
+    await db.commit()
+
+    if request.consent_status == "opted_out":
+        try:
+            from app.services.temporal_consistency import temporal_gate
+            temporal_gate.clear_visitor(visitor_id)
+        except Exception:
+            logger.debug("Could not clear temporal gate for %s", visitor_id)
+
     return await get_visitor(visitor_id, db, _key)
 
 

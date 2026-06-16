@@ -62,6 +62,7 @@ class CameraService:
         self.fps: float = settings.CAMERA_FPS
         self.started_at: Optional[float] = None
         self.last_error: Optional[str] = None
+        self.loop_file: bool = False  # replay a finished video file from the start
         self.roi: Optional[dict] = None  # {"x1", "y1", "x2", "y2"} or None
         self.stats = {
             "frames_processed": 0,
@@ -82,6 +83,7 @@ class CameraService:
         source: Optional[str] = None,
         camera_id: Optional[str] = None,
         fps: Optional[float] = None,
+        loop: bool = False,
     ) -> None:
         if self.is_running:
             raise RuntimeError("Camera is already running.")
@@ -89,6 +91,7 @@ class CameraService:
         self.source = source if source is not None else settings.CAMERA_SOURCE
         self.camera_id = camera_id or settings.CAMERA_ID
         self.fps = fps or settings.CAMERA_FPS
+        self.loop_file = loop
         self.last_error = None
 
         cap_source = _parse_source(self.source)
@@ -131,6 +134,13 @@ class CameraService:
                     # Files end; live cameras may hiccup — retry briefly.
                     if isinstance(_parse_source(self.source), int) or str(self.source).startswith("rtsp"):
                         await asyncio.sleep(interval)
+                        continue
+                    # Video file ended — replay from the start when looping.
+                    if self.loop_file and self.capture is not None:
+                        await asyncio.to_thread(
+                            self.capture.set, cv2.CAP_PROP_POS_FRAMES, 0
+                        )
+                        prev_sig = None
                         continue
                     logger.info("Camera source ended.")
                     break
@@ -226,9 +236,13 @@ class CameraService:
         return encode_jpeg(frame, settings.LIVE_FEED_JPEG_QUALITY)
 
     def status(self) -> dict:
+        src = self.source or ""
+        is_file = bool(src) and not src.isdigit() and not src.startswith(("rtsp", "http"))
         return {
             "is_running": self.is_running,
             "source": self.source,
+            "source_kind": "video" if is_file else "camera",
+            "looping": self.loop_file,
             "camera_id": self.camera_id,
             "fps": self.fps,
             "frames_processed": self.stats["frames_processed"],

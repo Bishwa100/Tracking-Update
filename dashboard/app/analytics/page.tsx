@@ -2,23 +2,25 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import { Flame } from "lucide-react";
+import { Flame, ShieldCheck } from "lucide-react";
 
 import { fetcher } from "@/lib/api";
 import type {
-  AnalyticsSummary,
+  ConfidenceWeightedSummary,
+  DetectionQuality,
   FrequencyDistribution,
   HourlyBreakdown,
   TopVisitor,
 } from "@/lib/types";
 import {
   DailyVisitsArea,
+  DetectionQualityBar,
   FrequencyBar,
   HourlyStackedBar,
   NewVsReturningDonut,
 } from "@/components/charts";
 import { StatCard } from "@/components/stat-card";
-import { Button, Card, CardTitle } from "@/components/ui";
+import { Button, Card, CardTitle, PageHeader } from "@/components/ui";
 import { formatDuration } from "@/lib/format";
 
 type RangeKey = "today" | "week" | "month";
@@ -35,11 +37,19 @@ export default function AnalyticsPage() {
   const [range, setRange] = useState<RangeKey>("month");
   const since = sinceFor(range);
 
-  const { data: summary } = useSWR<AnalyticsSummary>(`analytics/summary?since=${since}`, fetcher);
+  const { data: summary } = useSWR<ConfidenceWeightedSummary>(
+    `analytics/confidence-weighted?since=${since}`,
+    fetcher,
+  );
+  const { data: quality } = useSWR<DetectionQuality>(
+    `analytics/detection-quality?since=${since}`,
+    fetcher,
+  );
   const { data: freq } = useSWR<FrequencyDistribution>("analytics/frequency", fetcher);
   const { data: hourly } = useSWR<HourlyBreakdown>(`analytics/hourly?since=${since}`, fetcher);
   const { data: top } = useSWR<TopVisitor[]>("analytics/top-visitors?limit=5", fetcher);
 
+  const cw = summary?.confidence_weighted;
   const freqData = freq
     ? Object.entries(freq.distribution).map(([bucket, count]) => ({
         bucket: bucket === "1" ? "1 visit" : `${bucket} visits`,
@@ -49,24 +59,37 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Analytics</h1>
-        <div className="flex gap-2">
-          {(["today", "week", "month"] as RangeKey[]).map((k) => (
-            <Button key={k} variant={range === k ? "primary" : "ghost"} onClick={() => setRange(k)}>
-              {k === "today" ? "Today" : k === "week" ? "This Week" : "This Month"}
-            </Button>
-          ))}
-        </div>
-      </div>
+      <PageHeader
+        title="Analytics"
+        action={
+          <div className="flex gap-1.5 rounded-control bg-white/5 p-1">
+            {(["today", "week", "month"] as RangeKey[]).map((k) => (
+              <Button
+                key={k}
+                variant={range === k ? "primary" : "ghost"}
+                size="sm"
+                onClick={() => setRange(k)}
+              >
+                {k === "today" ? "Today" : k === "week" ? "Week" : "Month"}
+              </Button>
+            ))}
+          </div>
+        }
+      />
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatCard label="Unique Visitors" value={summary?.total_unique_visitors ?? "—"} />
-        <StatCard label="Total Visits" value={summary?.total_visits ?? "—"} tone="success" />
+        <StatCard
+          label="Effective Unique"
+          value={cw ? cw.effective_unique.toFixed(0) : "—"}
+          hint={cw ? `conf-weighted · avg ${(cw.avg_confidence * 100).toFixed(0)}%` : undefined}
+          icon={<ShieldCheck className="h-5 w-5" />}
+          tone="accent"
+        />
         <StatCard
           label="Return Rate"
           value={summary ? `${Math.round(summary.return_rate * 100)}%` : "—"}
-          tone="accent"
+          tone="success"
         />
         <StatCard
           label="Avg Duration"
@@ -90,17 +113,34 @@ export default function AnalyticsPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Card>
+          <CardTitle>Detection Quality</CardTitle>
+          <DetectionQualityBar
+            high={quality?.bands.high ?? 0}
+            medium={quality?.bands.medium ?? 0}
+            low={quality?.bands.low ?? 0}
+          />
+          <p className="mt-2 text-center text-xs text-text-muted">
+            {quality ? `${quality.total_detections.toLocaleString()} detections` : ""}
+          </p>
+        </Card>
         <Card className="lg:col-span-2">
           <CardTitle>Hourly (New + Returning)</CardTitle>
           <HourlyStackedBar data={hourly?.hourly ?? []} />
         </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card>
           <CardTitle>Top Regulars</CardTitle>
           <ol className="space-y-2 text-sm">
             {(top ?? []).map((v, i) => (
               <li key={v.visitor_id} className="flex items-center justify-between">
-                <a href={`/visitors/${v.visitor_id}`} className="flex items-center gap-2 hover:text-primary">
-                  <span className="text-text-secondary">{i + 1}.</span>
+                <a
+                  href={`/visitors/${v.visitor_id}`}
+                  className="flex items-center gap-2 hover:text-primary-bright"
+                >
+                  <span className="text-text-muted">{i + 1}.</span>
                   {v.name || `Visitor ${v.visitor_id.slice(0, 8)}`}
                 </a>
                 <span className="inline-flex items-center gap-1 font-medium">
@@ -114,12 +154,11 @@ export default function AnalyticsPage() {
             )}
           </ol>
         </Card>
+        <Card className="lg:col-span-2">
+          <CardTitle>Visit Frequency Distribution</CardTitle>
+          <FrequencyBar data={freqData} />
+        </Card>
       </div>
-
-      <Card>
-        <CardTitle>Visit Frequency Distribution</CardTitle>
-        <FrequencyBar data={freqData} />
-      </Card>
     </div>
   );
 }

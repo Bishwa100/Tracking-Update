@@ -5,11 +5,11 @@ import useSWR from "swr";
 import { DoorOpen, LogIn, RefreshCw, Users } from "lucide-react";
 
 import { fetcher } from "@/lib/api";
-import type { AnalyticsSummary, ActivityResponse, LiveFeedMessage } from "@/lib/types";
-import { LiveFeed } from "@/components/live-feed";
+import type { AnalyticsSummary, ActivityResponse, CameraStatus } from "@/lib/types";
+import { DetectionFeed } from "@/components/detection-feed";
 import { ActivityFeed } from "@/components/activity-feed";
 import { StatCard } from "@/components/stat-card";
-import { Card, CardTitle } from "@/components/ui";
+import { Card, CardTitle, PageHeader } from "@/components/ui";
 
 function startOfTodayISO() {
   const d = new Date();
@@ -18,7 +18,7 @@ function startOfTodayISO() {
 }
 
 export default function LiveMonitorPage() {
-  const [live, setLive] = useState<LiveFeedMessage | null>(null);
+  const [status, setStatus] = useState<CameraStatus | null>(null);
   const since = startOfTodayISO();
 
   const { data: summary } = useSWR<AnalyticsSummary>(
@@ -32,17 +32,20 @@ export default function LiveMonitorPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Live Monitor</h1>
+      <PageHeader
+        title="Live Monitor"
+        subtitle="Real-time feed with on-frame recognition labels."
+      />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <LiveFeed onMessage={setLive} />
+          <DetectionFeed onStatus={setStatus} />
         </div>
 
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-1">
           <StatCard
-            label="Currently Inside"
-            value={live?.currently_inside ?? "—"}
+            label="Persons Detected"
+            value={status?.persons_detected ?? "—"}
             icon={<Users className="h-6 w-6" />}
             tone="primary"
           />

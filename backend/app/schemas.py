@@ -89,6 +89,16 @@ class VisitorDetailResponse(VisitorSummary):
     notes: Optional[str] = None
     total_faces_recorded: int = 0
     latest_visit: Optional[VisitSummary] = None
+    consent_status: Optional[str] = None
+    consent_at: Optional[datetime] = None
+    consent_method: Optional[str] = None
+    opted_out_at: Optional[datetime] = None
+
+
+class ConsentUpdateRequest(BaseModel):
+    # "explicit" | "implicit" | "opted_out"
+    consent_status: str
+    method: Optional[str] = "staff"
 
 
 class VisitListResponse(BaseModel):
@@ -115,6 +125,8 @@ class CameraStartRequest(BaseModel):
 class CameraStatusResponse(BaseModel):
     is_running: bool
     source: Optional[str] = None
+    source_kind: Optional[str] = None  # "video" | "camera"
+    looping: bool = False
     camera_id: Optional[str] = None
     fps: Optional[float] = None
     frames_processed: int = 0

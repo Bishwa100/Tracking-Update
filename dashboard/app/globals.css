@@ -8,8 +8,18 @@
 
 html,
 body {
-  background-color: #0f172a;
+  background-color: #0a0f1e;
   color: #f8fafc;
+}
+
+/* Ambient background: faint dotted grid + soft radial glows. */
+body {
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.05) 1px, transparent 0),
+    radial-gradient(800px circle at 0% 0%, rgba(59, 130, 246, 0.08), transparent 45%),
+    radial-gradient(700px circle at 100% 100%, rgba(139, 92, 246, 0.07), transparent 45%);
+  background-size: 22px 22px, 100% 100%, 100% 100%;
+  background-attachment: fixed;
 }
 
 /* Thin custom scrollbar to match the dark theme. */
@@ -18,12 +28,36 @@ body {
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #1e293b;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #475569;
+  background: #2a3650;
   border-radius: 8px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
+  background: #3b4a6b;
+}
+
+/* Reusable glass surface. */
+@layer components {
+  .glass {
+    @apply border border-white/5 bg-surface/70 backdrop-blur-xl;
+  }
+  .glass-hover {
+    @apply transition-all duration-200 hover:border-white/10 hover:bg-surface;
+  }
+  /* Skeleton shimmer block. */
+  .skeleton {
+    @apply relative overflow-hidden rounded-control bg-card/40;
+  }
+  .skeleton::after {
+    content: "";
+    @apply absolute inset-0 -translate-x-full animate-shimmer;
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.06),
+      transparent
+    );
+  }
 }

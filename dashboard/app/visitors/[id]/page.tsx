@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import useSWR, { useSWRConfig } from "swr";
-import { ArrowLeft, GitMerge, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, GitMerge, Save, ShieldCheck, ShieldX, Trash2, UserCog } from "lucide-react";
 
 import { api, fetcher } from "@/lib/api";
 import type { VisitorDetail, VisitListResponse } from "@/lib/types";
@@ -12,6 +12,17 @@ import { formatDateTime, formatDuration, relativeTime } from "@/lib/format";
 import { VisitorAvatar } from "@/components/visitor-table";
 import { MonthlyBar } from "@/components/charts";
 import { Badge, Button, Card, CardTitle, ErrorState, Spinner } from "@/components/ui";
+
+const CONSENT_TONE: Record<string, "success" | "neutral" | "danger"> = {
+  explicit: "success",
+  implicit: "neutral",
+  opted_out: "danger",
+};
+const CONSENT_LABEL: Record<string, string> = {
+  explicit: "Explicit Consent",
+  implicit: "Implicit Consent",
+  opted_out: "Opted Out",
+};
 
 function monthlyBuckets(visits: { entered_at: string }[]) {
   const counts = new Map<string, number>();
@@ -90,6 +101,14 @@ export default function VisitorProfilePage() {
     }
   }
 
+  async function setConsent(status: string) {
+    if (status === "opted_out" && !confirm("Opt this visitor out? They will no longer be recognised and their embeddings will be purged.")) {
+      return;
+    }
+    await api.post(`visitors/${id}/consent`, { consent_status: status, method: "staff" });
+    await mutate(`visitors/${id}`);
+  }
+
   return (
     <div className="space-y-6">
       <Link href="/visitors" className="inline-flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary">
@@ -109,6 +128,16 @@ export default function VisitorProfilePage() {
                 className="rounded-control border border-card/60 bg-bg px-3 py-1.5 text-lg font-semibold outline-none focus:border-primary"
               />
               {visitor.is_staff && <Badge tone="accent">Staff</Badge>}
+              {visitor.consent_status && (
+                <Badge tone={CONSENT_TONE[visitor.consent_status] ?? "neutral"}>
+                  {visitor.consent_status === "opted_out" ? (
+                    <ShieldX className="h-3 w-3" />
+                  ) : (
+                    <ShieldCheck className="h-3 w-3" />
+                  )}
+                  {CONSENT_LABEL[visitor.consent_status] ?? visitor.consent_status}
+                </Badge>
+              )}
             </div>
             <textarea
               value={displayNotes}
@@ -169,6 +198,34 @@ export default function VisitorProfilePage() {
             <li className="py-4 text-center text-text-secondary">No visits.</li>
           )}
         </ul>
+      </Card>
+
+      {/* Consent & privacy */}
+      <Card>
+        <CardTitle>
+          <span className="flex items-center gap-2">
+            <UserCog className="h-4 w-4" /> Consent &amp; Privacy
+          </span>
+        </CardTitle>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm text-text-secondary">Current status:</span>
+          <Badge tone={CONSENT_TONE[visitor.consent_status ?? "implicit"] ?? "neutral"}>
+            {CONSENT_LABEL[visitor.consent_status ?? "implicit"] ?? "Implicit"}
+          </Badge>
+          {visitor.opted_out_at && (
+            <span className="text-xs text-text-muted">
+              opted out {relativeTime(visitor.opted_out_at)}
+            </span>
+          )}
+          <div className="ml-auto flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setConsent("explicit")}>
+              <ShieldCheck className="h-4 w-4" /> Mark Consented
+            </Button>
+            <Button variant="danger" size="sm" onClick={() => setConsent("opted_out")}>
+              <ShieldX className="h-4 w-4" /> Opt Out
+            </Button>
+          </div>
+        </div>
       </Card>
 
       {/* Danger zone */}
