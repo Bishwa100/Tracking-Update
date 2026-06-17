@@ -11,7 +11,7 @@ import {
   UserX,
 } from "lucide-react";
 
-import { api, fetcher } from "@/lib/api";
+import { api, fetcher, imageUrl } from "@/lib/api";
 import type { ReviewFlag } from "@/lib/types";
 import { relativeTime } from "@/lib/format";
 import {
@@ -41,6 +41,64 @@ const FLAG_META: Record<
   high_ambiguity: { tone: "warning", icon: ShieldAlert, label: "High Ambiguity" },
   opted_out_match: { tone: "danger", icon: UserX, label: "Opted-Out Match" },
 };
+
+function ComparePhoto({
+  visitorId,
+  label,
+  name,
+}: {
+  visitorId: string;
+  label: string;
+  name?: string | null;
+}) {
+  return (
+    <Link
+      href={`/visitors/${visitorId}`}
+      className="group flex flex-col items-center gap-1.5"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={imageUrl(`/api/visitors/${visitorId}/thumbnail`)}
+        alt={name || label}
+        width={112}
+        height={112}
+        className="h-28 w-28 rounded-control border border-card/60 object-cover transition group-hover:border-primary"
+        style={{ width: 112, height: 112 }}
+      />
+      <span className="text-[10px] uppercase tracking-wide text-text-muted">
+        {label}
+      </span>
+      <span className="max-w-[7rem] truncate text-xs font-medium text-text-secondary group-hover:text-primary">
+        {name || `Visitor ${visitorId.slice(0, 8)}`}
+      </span>
+    </Link>
+  );
+}
+
+function DuplicateCompare({ flag }: { flag: ReviewFlag }) {
+  if (!flag.matched_visitor_id) return null;
+  return (
+    <div className="mt-3 flex items-center gap-4 rounded-control bg-card/30 p-3">
+      <ComparePhoto visitorId={flag.visitor_id} label="New" />
+      <div className="flex flex-col items-center gap-1 text-center">
+        <Copy className="h-4 w-4 text-accent-bright" />
+        {flag.similarity != null && (
+          <span className="text-xs font-semibold text-text-primary">
+            {(flag.similarity * 100).toFixed(1)}%
+          </span>
+        )}
+        <span className="text-[10px] uppercase tracking-wide text-text-muted">
+          match
+        </span>
+      </div>
+      <ComparePhoto
+        visitorId={flag.matched_visitor_id}
+        label="Existing"
+        name={flag.matched_visitor_name}
+      />
+    </div>
+  );
+}
 
 export default function ReviewQueuePage() {
   const { mutate } = useSWRConfig();
@@ -160,6 +218,7 @@ export default function ReviewQueuePage() {
                       >
                         View visitor {flag.visitor_id.slice(0, 8)} →
                       </Link>
+                      <DuplicateCompare flag={flag} />
                     </div>
                   </div>
                   <Button
