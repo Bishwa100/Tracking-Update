@@ -23,6 +23,13 @@ for _var in (
 ):
     os.environ[_var] = _cpu_threads
 
+# Never let Ultralytics pip-install missing requirements at runtime. With
+# `onnxruntime-gpu` installed, the distribution is named "onnxruntime-gpu" so
+# Ultralytics' `importlib.metadata.version("onnxruntime")` check fails and it
+# tries to reinstall "onnxruntime" on every warmup — which fails (the DLL is in
+# use) and, under `uvicorn --reload`, retriggers an endless reload loop.
+os.environ.setdefault("YOLO_AUTOINSTALL", "False")
+
 import asyncio
 import logging
 from contextlib import asynccontextmanager

@@ -51,8 +51,17 @@ def _bbox_center_in_roi(bbox: dict, roi: dict) -> bool:
 
 
 def _filter_by_roi(detections: list, roi: dict) -> list:
-    """Filter detections to only those within the ROI."""
-    return [d for d in detections if _bbox_center_in_roi(d.bbox, roi)]
+    """Keep only detections whose *drawn* box falls inside the ROI.
+
+    The label is rendered on the face box when a face is present (otherwise the
+    person box), so we gate on that same box — a tall person whose body center
+    is in the zone but whose face is above it must not produce a label outside
+    the zone.
+    """
+    return [
+        d for d in detections
+        if _bbox_center_in_roi(getattr(d, "face_bbox", None) or d.bbox, roi)
+    ]
 
 
 class CameraService:
@@ -302,7 +311,12 @@ class CameraService:
             raise
 
     async def _inference_worker(self, worker_id: int) -> None:
-        """Pull the newest frame and run the CV pipeline off the event loop."""
+        """Pull the newest frame and run the CV pipeline off the event loop.
+
+        When an ROI is set, inference runs on the ROI crop only — so YOLO,
+        ArcFace and OSNet never compute (and nothing ever registers) for anyone
+        outside the zone. Boxes are offset back to full-frame coordinates.
+        """
         embedding_cache = FaceEmbeddingCache()
         try:
             while self.is_running:
@@ -310,8 +324,13 @@ class CameraService:
                 if frame is None:
                     break
 
+                # Restrict all heavy compute to the zone.
+                infer_frame, ox, oy = self._roi_crop(frame, self.roi)
+
+                # Dedup on the region we actually process, so only motion inside
+                # the zone triggers a (skippable) detection pass.
                 if settings.FRAME_DEDUP_ENABLED:
-                    sig = frame_signature(frame)
+                    sig = frame_signature(infer_frame)
                     if frames_are_similar(self._last_sig, sig, settings.FRAME_DEDUP_MAD_THRESHOLD):
                         self._last_sig = sig
                         self.stats["frames_skipped"] += 1
@@ -320,17 +339,49 @@ class CameraService:
 
                 try:
                     detections = await run_inference(
-                        process_frame, frame, True, embedding_cache
+                        process_frame, infer_frame, True, embedding_cache
                     )
                 except Exception as exc:
                     self.last_error = str(exc)
                     logger.exception("Inference failed (worker %d): %s", worker_id, exc)
                     continue
 
+                if ox or oy:
+                    self._offset_detections(detections, ox, oy)
+
                 if self._results is not None:
                     await self._results.put((fid, frame, detections))
         except asyncio.CancelledError:
             raise
+
+    @staticmethod
+    def _roi_crop(frame: np.ndarray, roi: Optional[dict]):
+        """Return (crop, offset_x, offset_y). No ROI → the full frame at (0, 0)."""
+        if not roi or frame is None:
+            return frame, 0, 0
+        h, w = frame.shape[:2]
+        x1 = max(0, min(int(roi["x1"]), w))
+        y1 = max(0, min(int(roi["y1"]), h))
+        x2 = max(0, min(int(roi["x2"]), w))
+        y2 = max(0, min(int(roi["y2"]), h))
+        if x2 - x1 < 10 or y2 - y1 < 10:
+            return frame, 0, 0
+        # Contiguous copy — a sliced view can break downstream cv2/ORT ops.
+        return np.ascontiguousarray(frame[y1:y2, x1:x2]), x1, y1
+
+    @staticmethod
+    def _offset_detections(detections: list, ox: int, oy: int) -> None:
+        """Shift crop-relative boxes/landmarks back into full-frame coords (in place)."""
+        for d in detections:
+            for box in (d.bbox, getattr(d, "face_bbox", None)):
+                if box:
+                    box["x1"] += ox
+                    box["x2"] += ox
+                    box["y1"] += oy
+                    box["y2"] += oy
+            lmk = getattr(d, "face_landmarks", None)
+            if lmk is not None:
+                d.face_landmarks = lmk + np.asarray([ox, oy], dtype=lmk.dtype)
 
     async def _consumer_loop(self) -> None:
         """Post-process inference results: ROI filter, DB write, and publish the
@@ -390,13 +441,35 @@ class CameraService:
             raise
 
     def _draw_roi_overlay(self, frame: Optional[np.ndarray]) -> None:
+        """Visualize the detection zone on a frame (in place): dim everything
+        outside the ROI so the active area stands out, then a bright border +
+        label. No-op when no ROI is set."""
         if not (self.roi and frame is not None):
             return
         r = self.roi
-        cv2.rectangle(frame, (r["x1"], r["y1"]), (r["x2"], r["y2"]), (0, 100, 255), 2)
+        h, w = frame.shape[:2]
+        x1 = max(0, min(int(r["x1"]), w))
+        y1 = max(0, min(int(r["y1"]), h))
+        x2 = max(0, min(int(r["x2"]), w))
+        y2 = max(0, min(int(r["y2"]), h))
+        if x2 <= x1 or y2 <= y1:
+            return
+
+        # Darken the whole frame, then restore the ROI region at full brightness.
+        darkened = cv2.convertScaleAbs(frame, alpha=0.45, beta=0)
+        darkened[y1:y2, x1:x2] = frame[y1:y2, x1:x2]
+        np.copyto(frame, darkened)
+
+        # Bright amber border + label tab.
+        color = (0, 165, 255)  # BGR amber
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+        label = "Detection Zone"
+        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+        ty = y1 - 8 if y1 - th - 10 >= 0 else y1 + th + 8
+        cv2.rectangle(frame, (x1, ty - th - 6), (x1 + tw + 8, ty + 4), color, -1)
         cv2.putText(
-            frame, "Detection Zone", (r["x1"] + 4, r["y1"] + 18),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 100, 255), 1,
+            frame, label, (x1 + 4, ty),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA,
         )
 
     async def mjpeg_frames(self):
@@ -505,19 +578,7 @@ class CameraService:
                 self._last_annotated = (
                     draw_detections(frame, annotations) if annotations else frame.copy()
                 )
-
-                if self.roi and self._last_annotated is not None:
-                    r = self.roi
-                    cv2.rectangle(
-                        self._last_annotated,
-                        (r["x1"], r["y1"]), (r["x2"], r["y2"]),
-                        (0, 100, 255), 2
-                    )
-                    cv2.putText(
-                        self._last_annotated, "Detection Zone",
-                        (r["x1"] + 4, r["y1"] + 18),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 100, 255), 1
-                    )
+                self._draw_roi_overlay(self._last_annotated)
 
                 await self._sleep_remaining(loop_start, interval)
         except asyncio.CancelledError:

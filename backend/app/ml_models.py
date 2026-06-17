@@ -6,7 +6,12 @@ the device is chosen at load time and can be switched live via reload().
 """
 
 import logging
+import os
 from typing import Optional, List
+
+# Disable Ultralytics runtime pip auto-install (see app/main.py for the full
+# rationale) — must be set before `ultralytics` is first imported below.
+os.environ.setdefault("YOLO_AUTOINSTALL", "False")
 
 import cv2
 import numpy as np
