@@ -8,8 +8,8 @@ Create Date: 2026-06-16
 from alembic import op
 import sqlalchemy as sa
 
-revision = "003"
-down_revision = "002"
+revision = "003_consent_system"
+down_revision = "002_pose_bin_consent"
 branch_labels = None
 depends_on = None
 

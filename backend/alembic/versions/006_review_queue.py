@@ -8,8 +8,8 @@ Create Date: 2026-06-16
 from alembic import op
 import sqlalchemy as sa
 
-revision = "006"
-down_revision = "005"
+revision = "006_review_queue"
+down_revision = "005_runtime_settings"
 branch_labels = None
 depends_on = None
 

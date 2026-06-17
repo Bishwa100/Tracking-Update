@@ -17,8 +17,8 @@ from datetime import date, timedelta
 from alembic import op
 import sqlalchemy as sa
 
-revision = "004"
-down_revision = "003"
+revision = "004_partition_detection_events"
+down_revision = "003_consent_system"
 branch_labels = None
 depends_on = None
 
@@ -64,10 +64,11 @@ def upgrade() -> None:
             body_similarity FLOAT,
             is_new_visitor BOOLEAN DEFAULT FALSE,
             is_ambiguous BOOLEAN DEFAULT FALSE,
-            match_source VARCHAR(20),
-            camera_id VARCHAR(50),
-            frame_path VARCHAR(500),
-            bbox JSONB
+            match_source VARCHAR(16),
+            camera_id TEXT,
+            frame_path TEXT,
+            bbox JSONB,
+            created_at TIMESTAMPTZ
         ) PARTITION BY RANGE (detected_at)
     """))
 
