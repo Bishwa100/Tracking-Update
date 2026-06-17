@@ -214,6 +214,16 @@ async def get_review_queue(
     return await get_pending_flags(db, limit=limit)
 
 
+@router.post("/review-queue/auto-merge-duplicates")
+async def auto_merge_review_duplicates(
+    _key: str = Security(verify_admin_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Merge all probable-duplicate flags into their matched visitor (global dedup)."""
+    from app.services.review_queue import auto_merge_duplicates
+    return await auto_merge_duplicates(db)
+
+
 @router.post("/review-queue/{flag_id}/resolve")
 async def resolve_review_flag(
     flag_id: str,
@@ -225,6 +235,18 @@ async def resolve_review_flag(
     from app.services.review_queue import resolve_flag
     ok = await resolve_flag(db, uuid.UUID(flag_id))
     return {"success": ok, "flag_id": flag_id}
+
+
+@router.post("/visitors/{visitor_id}/clean-faces")
+async def clean_visitor_faces(
+    visitor_id: str,
+    _key: str = Security(verify_admin_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Auto-remove unclear faces from a visitor's gallery (clarity-based pruning)."""
+    import uuid
+    from app.services.auto_enroller import clean_visitor_gallery
+    return await clean_visitor_gallery(db, uuid.UUID(visitor_id))
 
 
 @router.post("/settings/reload")

@@ -60,6 +60,13 @@ class Settings(BaseSettings):
     # Minimum ArcFace det_score for a face to be stored in the gallery or to
     # seed a new visitor. Low-quality faces produce unreliable embeddings.
     FACE_QUALITY_CUTOFF: float = 0.45
+    # Operator-triggered "auto-clean faces": gallery faces whose combined clarity
+    # (landmark frontality + Laplacian sharpness + det_score) falls below this are
+    # deleted, except the single clearest face which is always kept.
+    FACE_CLARITY_CUTOFF: float = 0.45
+    # Laplacian-variance reference for blur normalization; a crop at/above this is
+    # treated as fully sharp (blur sub-score = 1.0).
+    FACE_BLUR_REF: float = 120.0
     # Weighted-moving-average learning rate base for the adaptive centroid.
     CENTROID_ALPHA_BASE: float = 0.15
 

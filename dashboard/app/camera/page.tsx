@@ -5,7 +5,12 @@ import useSWR from "swr";
 import { Play, RefreshCcw, Square } from "lucide-react";
 
 import { api, fetcher, imageUrl } from "@/lib/api";
-import type { CameraStatus, RoiResponse, RegionOfInterest } from "@/lib/types";
+import type {
+  CameraStatus,
+  RoiResponse,
+  RegionOfInterest,
+  VisitorListResponse,
+} from "@/lib/types";
 import { Badge, Button, Card, CardTitle, ErrorState } from "@/components/ui";
 import { uptime } from "@/lib/format";
 
@@ -14,6 +19,12 @@ export default function CameraPage() {
     refreshInterval: 3000,
   });
   const { data: roiData } = useSWR<RoiResponse>("camera/roi", fetcher);
+  // All-time registered visitor count (active, non-staff); limit=1 → just the total.
+  const { data: visitorList } = useSWR<VisitorListResponse>(
+    "visitors?limit=1",
+    fetcher,
+    { refreshInterval: 5000 },
+  );
 
   const [source, setSource] = useState("0");
   const [fps, setFps] = useState("1.0");
@@ -251,7 +262,8 @@ export default function CameraPage() {
             <Row label="Frames processed">{status?.frames_processed ?? 0}</Row>
             <Row label="Frames skipped (dedup)">{status?.frames_skipped ?? 0}</Row>
             <Row label="Persons detected">{status?.persons_detected ?? 0}</Row>
-            <Row label="New / Returning">
+            <Row label="Registered visitors">{visitorList?.total ?? "—"}</Row>
+            <Row label="New / Returning (session)">
               {status ? `${status.new_visitors} / ${status.returning_visitors}` : "—"}
             </Row>
             {status?.last_error && <Row label="Last error"><span className="text-danger">{status.last_error}</span></Row>}

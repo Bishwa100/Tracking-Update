@@ -6,8 +6,10 @@ import useSWR, { useSWRConfig } from "swr";
 import {
   AlertTriangle,
   Check,
+  Combine,
   Copy,
   ShieldAlert,
+  Sparkles,
   UserX,
 } from "lucide-react";
 
@@ -108,6 +110,10 @@ export default function ReviewQueuePage() {
     { refreshInterval: 15000 },
   );
   const [resolving, setResolving] = useState<string | null>(null);
+  const [cleaning, setCleaning] = useState<string | null>(null);
+  const [cleanResult, setCleanResult] = useState<Record<string, string>>({});
+  const [merging, setMerging] = useState(false);
+  const [mergeResult, setMergeResult] = useState<string | null>(null);
 
   const flags = data ?? [];
 
@@ -121,10 +127,51 @@ export default function ReviewQueuePage() {
     }
   }
 
+  async function cleanFaces(flagId: string, visitorId: string) {
+    setCleaning(flagId);
+    try {
+      const res = await api.post<{ removed: number; kept: number }>(
+        `admin/visitors/${visitorId}/clean-faces`,
+      );
+      setCleanResult((prev) => ({
+        ...prev,
+        [flagId]: res.removed
+          ? `Removed ${res.removed} unclear face${res.removed === 1 ? "" : "s"} · ${res.kept} kept`
+          : `No unclear faces · ${res.kept} kept`,
+      }));
+    } catch {
+      setCleanResult((prev) => ({ ...prev, [flagId]: "Clean failed" }));
+    } finally {
+      setCleaning(null);
+    }
+  }
+
+  async function autoMergeDuplicates() {
+    setMerging(true);
+    setMergeResult(null);
+    try {
+      const res = await api.post<{ merged: number; skipped: number }>(
+        "admin/review-queue/auto-merge-duplicates",
+      );
+      setMergeResult(
+        res.merged
+          ? `Merged ${res.merged} duplicate${res.merged === 1 ? "" : "s"} into a single user${res.skipped ? ` · ${res.skipped} skipped` : ""}`
+          : "No duplicates could be merged",
+      );
+      await mutate("admin/review-queue?limit=99");
+    } catch {
+      setMergeResult("Auto-merge failed");
+    } finally {
+      setMerging(false);
+    }
+  }
+
   const byType = flags.reduce<Record<string, number>>((acc, f) => {
     acc[f.flag_type] = (acc[f.flag_type] || 0) + 1;
     return acc;
   }, {});
+
+  const duplicateCount = byType["probable_duplicate"] || 0;
 
   return (
     <div className="space-y-6">
@@ -154,6 +201,39 @@ export default function ReviewQueuePage() {
             );
           })}
         </div>
+      )}
+
+      {duplicateCount > 0 && (
+        <Card className="!p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-accent/15 text-accent-bright">
+                <Combine className="h-5 w-5" />
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-sm font-medium text-text-primary">
+                  {duplicateCount} probable duplicate{duplicateCount === 1 ? "" : "s"}
+                </p>
+                <p className="text-xs text-text-muted">
+                  Merge each into the existing visitor it matches, collapsing them into
+                  a single user.
+                </p>
+                {mergeResult && (
+                  <p className="text-xs text-text-secondary">{mergeResult}</p>
+                )}
+              </div>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={autoMergeDuplicates}
+              disabled={merging}
+            >
+              <Combine className="h-4 w-4" />
+              {merging ? "Merging…" : "Auto-merge duplicates"}
+            </Button>
+          </div>
+        </Card>
       )}
 
       {error ? (
@@ -221,15 +301,31 @@ export default function ReviewQueuePage() {
                       <DuplicateCompare flag={flag} />
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => resolve(flag.id)}
-                    disabled={resolving === flag.id}
-                  >
-                    <Check className="h-4 w-4" />
-                    {resolving === flag.id ? "…" : "Resolve"}
-                  </Button>
+                  <div className="flex shrink-0 flex-col items-end gap-1.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => cleanFaces(flag.id, flag.visitor_id)}
+                      disabled={cleaning === flag.id}
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      {cleaning === flag.id ? "…" : "Auto-clean faces"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => resolve(flag.id)}
+                      disabled={resolving === flag.id}
+                    >
+                      <Check className="h-4 w-4" />
+                      {resolving === flag.id ? "…" : "Resolve"}
+                    </Button>
+                    {cleanResult[flag.id] && (
+                      <span className="max-w-[10rem] text-right text-[10px] text-text-muted">
+                        {cleanResult[flag.id]}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </Card>
             );

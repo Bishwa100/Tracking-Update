@@ -41,6 +41,56 @@ def _save_thumbnail(visitor_id: UUID, face_crop: Optional[np.ndarray]) -> Option
     return str(path)
 
 
+def _save_face_crop(
+    visitor_id: UUID, face_id: UUID, face_crop: Optional[np.ndarray]
+) -> Optional[str]:
+    """Persist a gallery face's tight crop so its clarity can be re-scored later."""
+    if face_crop is None or face_crop.size == 0:
+        return None
+    out_dir = Path(settings.VISITOR_PHOTO_DIR) / str(visitor_id) / "faces"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"{face_id}.jpg"
+    try:
+        cv2.imwrite(str(path), face_crop)
+    except Exception as exc:
+        logger.warning("Could not write face crop for %s: %s", visitor_id, exc)
+        return None
+    return str(path)
+
+
+def _add_gallery_face(
+    db: AsyncSession,
+    visitor_id: UUID,
+    embedding: list,
+    det_score: float,
+    body_embedding: Optional[list],
+    pose_bin: str,
+    face_crop: Optional[np.ndarray],
+) -> VisitorFace:
+    """Build a VisitorFace (with explicit id), persist its crop, and stage it."""
+    face = VisitorFace(
+        id=uuid4(),
+        visitor_id=visitor_id,
+        embedding=embedding,
+        det_score=det_score,
+        body_embedding=body_embedding,
+        pose_bin=pose_bin,
+    )
+    face.crop_path = _save_face_crop(visitor_id, face.id, face_crop)
+    db.add(face)
+    return face
+
+
+async def _delete_gallery_face(db: AsyncSession, face: VisitorFace) -> None:
+    """Delete a gallery face row and remove its crop file from disk."""
+    if face.crop_path:
+        try:
+            Path(face.crop_path).unlink(missing_ok=True)
+        except Exception as exc:
+            logger.debug("Could not remove face crop %s: %s", face.crop_path, exc)
+    await db.delete(face)
+
+
 async def register_new_visitor(
     db: AsyncSession,
     face_embedding: list,
@@ -64,14 +114,8 @@ async def register_new_visitor(
     await db.flush()  # assign PK / make it queryable in this tx
 
     pose_bin = pose.bin.value if pose else "unknown"
-    db.add(
-        VisitorFace(
-            visitor_id=visitor.id,
-            embedding=face_embedding,
-            det_score=det_score,
-            body_embedding=body_embedding,
-            pose_bin=pose_bin,
-        )
+    _add_gallery_face(
+        db, visitor.id, face_embedding, det_score, body_embedding, pose_bin, face_crop
     )
 
     thumb = _save_thumbnail(visitor.id, face_crop)
@@ -97,6 +141,7 @@ async def add_face_to_gallery(
     det_score: float,
     body_embedding: Optional[list] = None,
     pose: Optional[FacePose] = None,
+    face_crop: Optional[np.ndarray] = None,
 ) -> None:
     """
     Insert a face using pose-aware eviction policy.
@@ -124,13 +169,9 @@ async def add_face_to_gallery(
     if total < settings.MAX_FACES_PER_VISITOR:
         # Gallery has room — add if this bin isn't over its cap
         if current_bin_count < _MAX_PER_BIN:
-            db.add(VisitorFace(
-                visitor_id=visitor_id,
-                embedding=embedding,
-                det_score=det_score,
-                body_embedding=body_embedding,
-                pose_bin=bin_name,
-            ))
+            _add_gallery_face(
+                db, visitor_id, embedding, det_score, body_embedding, bin_name, face_crop
+            )
         return
 
     # Gallery is full — smart eviction
@@ -138,14 +179,10 @@ async def add_face_to_gallery(
         # This bin is underrepresented; evict worst from most overcrowded bin
         worst = _find_eviction_candidate(rows, bin_counts, bin_name)
         if worst is not None and det_score > worst.det_score * 0.9:
-            await db.delete(worst)
-            db.add(VisitorFace(
-                visitor_id=visitor_id,
-                embedding=embedding,
-                det_score=det_score,
-                body_embedding=body_embedding,
-                pose_bin=bin_name,
-            ))
+            await _delete_gallery_face(db, worst)
+            _add_gallery_face(
+                db, visitor_id, embedding, det_score, body_embedding, bin_name, face_crop
+            )
     else:
         # Bin already has enough faces — only replace worst-quality in same bin
         worst_in_bin = (
@@ -153,14 +190,10 @@ async def add_face_to_gallery(
             if current_bin_faces else None
         )
         if worst_in_bin is not None and det_score > (worst_in_bin.det_score or 0.0):
-            await db.delete(worst_in_bin)
-            db.add(VisitorFace(
-                visitor_id=visitor_id,
-                embedding=embedding,
-                det_score=det_score,
-                body_embedding=body_embedding,
-                pose_bin=bin_name,
-            ))
+            await _delete_gallery_face(db, worst_in_bin)
+            _add_gallery_face(
+                db, visitor_id, embedding, det_score, body_embedding, bin_name, face_crop
+            )
 
 
 def _find_eviction_candidate(
@@ -262,14 +295,16 @@ async def update_after_match(
 
     if face_similarity >= settings.STRONG_MATCH_THRESHOLD:
         await add_face_to_gallery(
-            db, visitor.id, face_embedding, det_score, body_embedding, pose=pose
+            db, visitor.id, face_embedding, det_score, body_embedding,
+            pose=pose, face_crop=face_crop,
         )
         await update_centroid(db, visitor, face_embedding, det_score)
         added_to_gallery = True
     elif face_similarity >= settings.RETURNING_FACE_THRESHOLD:
         if await _is_diverse_embedding(db, visitor.id, face_embedding):
             await add_face_to_gallery(
-                db, visitor.id, face_embedding, det_score, body_embedding, pose=pose
+                db, visitor.id, face_embedding, det_score, body_embedding,
+                pose=pose, face_crop=face_crop,
             )
             added_to_gallery = True
 
@@ -281,3 +316,74 @@ async def update_after_match(
         thumb = _save_thumbnail(visitor.id, face_crop)
         if thumb:
             visitor.thumbnail_path = thumb
+
+
+async def clean_visitor_gallery(db: AsyncSession, visitor_id: UUID) -> dict:
+    """
+    Score every gallery face for clarity (landmark frontality + blur + det_score)
+    and delete the unclear ones, always keeping the single clearest face. Promotes
+    the clearest remaining crop to the visitor thumbnail.
+
+    Returns a summary: {visitor_id, removed, kept, scores:[...]}.
+    """
+    from app.services.face_quality import compute_clarity
+
+    visitor = await db.get(Visitor, visitor_id)
+    if visitor is None:
+        return {"visitor_id": str(visitor_id), "removed": 0, "kept": 0, "scores": []}
+
+    faces = (
+        await db.execute(
+            select(VisitorFace).where(VisitorFace.visitor_id == visitor_id)
+        )
+    ).scalars().all()
+
+    # Score each face; cache the clarity on the row.
+    scored: list[tuple[VisitorFace, dict]] = []
+    for f in faces:
+        crop = cv2.imread(f.crop_path) if f.crop_path else None
+        result = compute_clarity(crop, f.det_score, f.pose_bin)
+        f.clarity_score = result["clarity"]
+        scored.append((f, result))
+
+    # Always keep the clearest face, even if it's below the cutoff.
+    scored.sort(key=lambda sf: sf[1]["clarity"], reverse=True)
+    keeper = scored[0][0] if scored else None
+
+    removed = 0
+    for f, result in scored:
+        if f is keeper:
+            continue
+        if result["clarity"] < settings.FACE_CLARITY_CUTOFF:
+            await _delete_gallery_face(db, f)
+            removed += 1
+
+    # Refresh thumbnail + best score from the clearest surviving face.
+    if keeper is not None:
+        if keeper.crop_path and Path(keeper.crop_path).exists():
+            crop = cv2.imread(keeper.crop_path)
+            thumb = _save_thumbnail(visitor_id, crop)
+            if thumb:
+                visitor.thumbnail_path = thumb
+        survivors = [f for f, _ in scored if f is keeper or f.clarity_score is None
+                     or f.clarity_score >= settings.FACE_CLARITY_CUTOFF]
+        visitor.best_face_det_score = max(
+            (f.det_score or 0.0 for f in survivors), default=0.0
+        )
+
+    await db.commit()
+
+    return {
+        "visitor_id": str(visitor_id),
+        "removed": removed,
+        "kept": len(scored) - removed,
+        "scores": [
+            {
+                "face_id": str(f.id),
+                "pose_bin": f.pose_bin,
+                "kept": (f is keeper) or (r["clarity"] >= settings.FACE_CLARITY_CUTOFF),
+                **r,
+            }
+            for f, r in scored
+        ],
+    }

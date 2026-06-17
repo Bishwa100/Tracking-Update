@@ -149,6 +149,54 @@ async def get_pending_flags(db: AsyncSession, limit: int = 50) -> list[dict]:
     ]
 
 
+async def auto_merge_duplicates(db: AsyncSession, limit: int = 200) -> dict:
+    """
+    Global one-click dedup: merge every unresolved `probable_duplicate` into the
+    existing visitor it resembles (highest-confidence first), collapsing each pair
+    into a single user. Merging the source visitor cascade-deletes its own flag, so
+    only un-mergeable flags (missing/already-merged target) are explicitly resolved.
+
+    Returns {merged, skipped, total}.
+    """
+    from app.services.visitor_merge import MergeError, merge_visitors
+
+    try:
+        rows = (await db.execute(text("""
+            SELECT id, visitor_id, matched_visitor_id, similarity
+            FROM review_queue
+            WHERE resolved = FALSE
+              AND flag_type = 'probable_duplicate'
+              AND matched_visitor_id IS NOT NULL
+            ORDER BY similarity DESC NULLS LAST
+            LIMIT :lim
+        """), {"lim": limit})).all()
+    except Exception as exc:
+        logger.error("auto_merge_duplicates query failed: %s", exc)
+        return {"merged": 0, "skipped": 0, "total": 0}
+
+    merged = 0
+    skipped = 0
+    gone: set[str] = set()  # sources already merged away this sweep
+
+    for r in rows:
+        target = str(r.matched_visitor_id)
+        # Target was itself merged away, or a self-reference — can't merge.
+        if target in gone or r.visitor_id == r.matched_visitor_id:
+            await resolve_flag(db, r.id)
+            skipped += 1
+            continue
+        try:
+            await merge_visitors(db, r.visitor_id, r.matched_visitor_id)
+        except MergeError:
+            await resolve_flag(db, r.id)
+            skipped += 1
+            continue
+        gone.add(str(r.visitor_id))
+        merged += 1
+
+    return {"merged": merged, "skipped": skipped, "total": len(rows)}
+
+
 async def resolve_flag(db: AsyncSession, flag_id: UUID) -> bool:
     """Mark a review flag as resolved."""
     try:

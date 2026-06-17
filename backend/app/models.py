@@ -107,6 +107,8 @@ class VisitorFace(Base):
     det_score = Column(Float, nullable=False, default=0.0)
     body_embedding = Column(Vector(512), nullable=True)
     source_frame_path = Column(Text, nullable=True)
+    crop_path = Column(Text, nullable=True)  # tight face crop on disk (for re-scoring)
+    clarity_score = Column(Float, nullable=True)  # cached "clearly visible" score, 0–1
     pose_bin = Column(String(20), nullable=True, default="unknown")
     created_at = Column(DateTime(timezone=True), default=utcnow)
 

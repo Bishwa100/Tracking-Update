@@ -13,6 +13,7 @@ import {
   UserCheck,
   UserPlus,
   Users,
+  UsersRound,
 } from "lucide-react";
 
 import { api, fetcher } from "@/lib/api";
@@ -20,6 +21,7 @@ import type {
   ActivityResponse,
   CameraStatus,
   VideoStreamResponse,
+  VisitorListResponse,
 } from "@/lib/types";
 import { DetectionFeed } from "@/components/detection-feed";
 import { ActivityFeed } from "@/components/activity-feed";
@@ -49,6 +51,13 @@ export default function VideoStudioPage() {
   const { data: activity } = useSWR<ActivityResponse>("activity?limit=10", fetcher, {
     refreshInterval: 3000,
   });
+  // All-time registered visitor count (active, non-staff) — `total` from the
+  // visitors list; limit=1 keeps the payload tiny since we only read the count.
+  const { data: visitorList } = useSWR<VisitorListResponse>(
+    "visitors?limit=1",
+    fetcher,
+    { refreshInterval: 5000 },
+  );
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -112,12 +121,27 @@ export default function VideoStudioPage() {
         <div className="space-y-6 lg:col-span-2">
           <DetectionFeed onStatus={setStatus} />
 
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
             <StatCard
-              label="Frames"
-              value={s?.frames_processed ?? "—"}
-              icon={<Film className="h-5 w-5" />}
+              label="Registered"
+              value={visitorList?.total ?? "—"}
+              hint="all-time total"
+              icon={<UsersRound className="h-5 w-5" />}
               tone="primary"
+            />
+            <StatCard
+              label="New"
+              value={s?.new_visitors ?? "—"}
+              hint="this session"
+              icon={<UserPlus className="h-5 w-5" />}
+              tone="success"
+            />
+            <StatCard
+              label="Returning"
+              value={s?.returning_visitors ?? "—"}
+              hint="this session"
+              icon={<UserCheck className="h-5 w-5" />}
+              tone="warning"
             />
             <StatCard
               label="Persons"
@@ -126,16 +150,10 @@ export default function VideoStudioPage() {
               tone="accent"
             />
             <StatCard
-              label="New"
-              value={s?.new_visitors ?? "—"}
-              icon={<UserPlus className="h-5 w-5" />}
-              tone="success"
-            />
-            <StatCard
-              label="Returning"
-              value={s?.returning_visitors ?? "—"}
-              icon={<UserCheck className="h-5 w-5" />}
-              tone="warning"
+              label="Frames"
+              value={s?.frames_processed ?? "—"}
+              icon={<Film className="h-5 w-5" />}
+              tone="primary"
             />
           </div>
         </div>
