@@ -5,7 +5,9 @@ import os
 import tempfile
 from typing import Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, Response, Security, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Response, Security, UploadFile
+from fastapi.responses import StreamingResponse
+from fastapi.security import APIKeyHeader
 
 from app.api import verify_api_key
 from app.config import settings
@@ -16,6 +18,10 @@ from app.utils import is_video_upload
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/camera", tags=["camera"])
+
+# Non-erroring header check for the MJPEG stream, which also accepts the key as a
+# query param (an <img> tag cannot send custom headers).
+_stream_api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
 
 # Directory for uploaded videos that the camera service streams from.
 _VIDEO_UPLOAD_DIR = os.path.join("storage", "uploaded_videos")
@@ -113,6 +119,34 @@ async def camera_snapshot(
     if jpeg is None:
         raise HTTPException(status_code=404, detail="No frame available yet.")
     return Response(content=jpeg, media_type="image/jpeg")
+
+
+@router.get("/stream")
+async def camera_stream(
+    api_key: Optional[str] = Query(None, description="API key (for <img> tags that can't set headers)"),
+    header_key: Optional[str] = Security(_stream_api_key_header),
+):
+    """
+    Live MJPEG push stream (multipart/x-mixed-replace). Frames are pushed to the
+    client the moment the pipeline produces them — usable directly as an
+    `<img src="/api/camera/stream?api_key=...">` source.
+
+    Auth accepts either the x-api-key header or an `api_key` query param, since a
+    browser <img> tag cannot send custom headers.
+    """
+    provided = header_key or api_key
+    if not provided or provided != settings.API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid or missing API key.")
+
+    cam = CameraService.get_instance()
+    if not cam.is_running:
+        raise HTTPException(status_code=409, detail="Camera is not running.")
+
+    return StreamingResponse(
+        cam.mjpeg_frames(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={"Cache-Control": "no-cache, no-store", "Connection": "close"},
+    )
 
 
 @router.post("/roi", response_model=RoiResponse)

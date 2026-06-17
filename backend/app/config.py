@@ -94,6 +94,10 @@ class Settings(BaseSettings):
     CAMERA_AUTOSTART: bool = False
     # JPEG quality (0-100) for snapshot / live-feed frames.
     LIVE_FEED_JPEG_QUALITY: int = 70
+    # Live preview encode rate (frames/sec). The display stays at this rate
+    # independent of how often detection runs, so the feed never freezes when
+    # frame-dedup skips the (expensive) detection pass on near-identical frames.
+    LIVE_PREVIEW_FPS: float = 15.0
 
     # ── Frame preprocessing ──────────────────────────────────
     # Downscale frames so the longest side is at most this many pixels before
@@ -140,8 +144,28 @@ class Settings(BaseSettings):
     # Math-library / torch thread count. 0 = use every physical core.
     CPU_THREADS: int = 0
     # Max frames running heavy inference at once. Each inference already uses
-    # every core, so 1 = serialize for predictable latency.
+    # every core, so 1 = serialize for predictable latency. Keep equal to
+    # INFERENCE_WORKERS; raising both shares one set of model objects across
+    # threads (see INFERENCE_WORKERS caveat).
     INFERENCE_MAX_CONCURRENCY: int = 1
+
+    # ── Parallel streaming pipeline ──────────────────────────
+    # Run the camera as a multi-stage pipeline (capture / inference / post-
+    # process+DB / encode), each stage concurrent, so the GPU stays busy on
+    # inference while the CPU handles capture, DB writes and JPEG encoding in
+    # parallel. This is the main throughput win and is safe with one worker.
+    # False falls back to the original single sequential loop.
+    PIPELINE_PARALLEL: bool = True
+    # Number of concurrent inference workers. 1 is safe and already keeps the GPU
+    # busy back-to-back. >1 overlaps CPU preprocessing with GPU compute for more
+    # throughput, BUT the shared YOLO/InsightFace/OSNet objects are not
+    # guaranteed thread-safe — only raise this once each worker has its own model
+    # instances. Also raise INFERENCE_MAX_CONCURRENCY to match.
+    INFERENCE_WORKERS: int = 1
+    # Optional cap on processed frames/sec (0 = unlimited, process as fast as the
+    # GPU allows). For video files this also paces playback; live cameras are
+    # naturally bounded by their own frame rate.
+    PIPELINE_MAX_FPS: float = 0.0
 
     # ── Face quality gates (detection) ───────────────────────
     # Faces smaller than this (px, min of width/height) are ignored — too small

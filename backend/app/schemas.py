@@ -123,6 +123,7 @@ class CameraStartRequest(BaseModel):
 
 
 class CameraStatusResponse(BaseModel):
+    pipeline: Optional[str] = None  # "parallel" | "sequential"
     is_running: bool
     source: Optional[str] = None
     source_kind: Optional[str] = None  # "video" | "camera"
