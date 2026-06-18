@@ -24,6 +24,26 @@ const CONSENT_LABEL: Record<string, string> = {
   opted_out: "Opted Out",
 };
 
+interface GalleryInsights {
+  gallery_size: number;
+  pose_coverage: Record<string, number>;
+  camera_coverage: Record<string, number>;
+  adaptive_thresholds: {
+    expected_match_similarity: number | null;
+    match_similarity_std: number | null;
+    personal_returning_threshold: number | null;
+    personal_new_threshold: number | null;
+  };
+  merges: {
+    id: string;
+    source_visitor_id: string | null;
+    reason: string | null;
+    similarity: number | null;
+    merged_by: string | null;
+    created_at: string | null;
+  }[];
+}
+
 function monthlyBuckets(visits: { entered_at: string }[]) {
   const counts = new Map<string, number>();
   for (const v of visits) {
@@ -48,6 +68,10 @@ export default function VisitorProfilePage() {
   const { data: visitor, error } = useSWR<VisitorDetail>(`visitors/${id}`, fetcher);
   const { data: visitsData } = useSWR<VisitListResponse>(
     `visitors/${id}/visits?limit=200`,
+    fetcher,
+  );
+  const { data: insights } = useSWR<GalleryInsights>(
+    `visitors/${id}/gallery-insights`,
     fetcher,
   );
 
@@ -175,6 +199,94 @@ export default function VisitorProfilePage() {
           <p className="py-6 text-center text-sm text-text-secondary">No visits recorded.</p>
         )}
       </Card>
+
+      {/* Gallery & matching (Phase 3/4) */}
+      {insights && (
+        <Card>
+          <CardTitle>
+            <span className="flex items-center gap-2">
+              <UserCog className="h-4 w-4" /> Gallery &amp; Matching
+            </span>
+          </CardTitle>
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-text-secondary">
+                Pose coverage ({insights.gallery_size} faces)
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.keys(insights.pose_coverage).length === 0 ? (
+                  <span className="text-sm text-text-muted">—</span>
+                ) : (
+                  Object.entries(insights.pose_coverage).map(([bin, n]) => (
+                    <Badge key={bin} tone="neutral">
+                      {bin}: {n}
+                    </Badge>
+                  ))
+                )}
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-text-secondary">
+                Seen on cameras
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.keys(insights.camera_coverage).length === 0 ? (
+                  <span className="text-sm text-text-muted">—</span>
+                ) : (
+                  Object.entries(insights.camera_coverage).map(([cam, n]) => (
+                    <Badge key={cam} tone="accent">
+                      {cam}: {n}
+                    </Badge>
+                  ))
+                )}
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-text-secondary">
+                Adaptive threshold
+              </p>
+              <dl className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <dt className="text-text-secondary">Returning</dt>
+                  <dd className="font-medium">
+                    {insights.adaptive_thresholds.personal_returning_threshold?.toFixed(3) ?? "global"}
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-text-secondary">Mean ± std</dt>
+                  <dd className="font-medium">
+                    {insights.adaptive_thresholds.expected_match_similarity != null
+                      ? `${insights.adaptive_thresholds.expected_match_similarity.toFixed(2)} ± ${(insights.adaptive_thresholds.match_similarity_std ?? 0).toFixed(2)}`
+                      : "—"}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+          {insights.merges.length > 0 && (
+            <div className="mt-4 border-t border-card/40 pt-3">
+              <p className="mb-2 text-xs uppercase tracking-wide text-text-secondary">
+                Merge history
+              </p>
+              <ul className="space-y-1 text-xs text-text-secondary">
+                {insights.merges.map((m) => (
+                  <li key={m.id} className="flex items-center gap-2">
+                    <GitMerge className="h-3 w-3 text-text-muted" />
+                    <span>{m.reason ?? "merge"}</span>
+                    {m.similarity != null && (
+                      <span className="text-text-muted">sim {m.similarity.toFixed(3)}</span>
+                    )}
+                    {m.merged_by && <Badge tone="neutral">{m.merged_by}</Badge>}
+                    {m.created_at && (
+                      <span className="ml-auto text-text-muted">{relativeTime(m.created_at)}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* History */}
       <Card>

@@ -12,6 +12,7 @@ import type {
   VisitorListResponse,
 } from "@/lib/types";
 import { Badge, Button, Card, CardTitle, ErrorState } from "@/components/ui";
+import { CameraTopologyManager } from "@/components/camera-topology";
 import { uptime } from "@/lib/format";
 
 export default function CameraPage() {
@@ -312,6 +313,8 @@ export default function CameraPage() {
           </Button>
         </div>
       </Card>
+
+      <CameraTopologyManager />
     </div>
   );
 }

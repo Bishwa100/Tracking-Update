@@ -15,24 +15,10 @@ import numpy as np
 
 from app.ml_models import ModelManager, FaceEmbeddingCache
 from app.config import settings
+from app.geometry import bbox_iou as _compute_iou
 from app.utils import normalize_embedding
 
 logger = logging.getLogger(__name__)
-
-
-def _compute_iou(b1: dict, b2: dict) -> float:
-    """Intersection-over-Union of two {x1,y1,x2,y2} bounding boxes."""
-    ix1 = max(b1["x1"], b2["x1"])
-    iy1 = max(b1["y1"], b2["y1"])
-    ix2 = min(b1["x2"], b2["x2"])
-    iy2 = min(b1["y2"], b2["y2"])
-    inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
-    if inter == 0:
-        return 0.0
-    a1 = max(0.0, b1["x2"] - b1["x1"]) * max(0.0, b1["y2"] - b1["y1"])
-    a2 = max(0.0, b2["x2"] - b2["x1"]) * max(0.0, b2["y2"] - b2["y1"])
-    union = a1 + a2 - inter
-    return inter / union if union > 0 else 0.0
 
 
 def _is_group_frame(persons: List["DetectedPerson"], iou_threshold: float = 0.4) -> bool:

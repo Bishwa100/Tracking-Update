@@ -49,18 +49,23 @@ class ResolutionResult:
 async def _search_faces_batch(
     embeddings: List[List[float]], db: AsyncSession,
     pose_bins: Optional[List[str]] = None,
-) -> List[List[Tuple[UUID, float]]]:
+    yaws: Optional[List[Optional[float]]] = None,
+) -> Tuple[List[List[Tuple[UUID, float]]], dict]:
     """
-    Return the top-K (visitor_id, similarity) gallery rows per input face
-    embedding, in input order (K = settings.IDENTITY_TOP_K). The caller
-    collapses these to the best score per visitor, so K > 2 ensures the closest
-    DIFFERENT visitor is visible to the ambiguity gate even when several of the
-    nearest rows belong to the same person. When pose_bins is provided each
-    embedding is compared against its matching pose bin first, then frontal as a
-    fallback, then unknown — giving pose-aware gallery search in one round-trip.
+    Search the gallery for the top-K rows per input face (K = IDENTITY_TOP_K) in
+    one round-trip. Returns (grouped_matches, threshold_map) where:
+      • grouped_matches[i] = [(visitor_id, similarity), ...] for input face i,
+        sorted by similarity descending (collapsed to best-per-visitor by caller),
+      • threshold_map[visitor_id] = that visitor's personal_returning_threshold
+        (or None) for the adaptive-threshold gate.
+
+    When pose_bins is provided the search is pose-aware: an exact bin / frontal /
+    unknown fallback ordering, optionally refined by continuous-yaw angular
+    distance (POSE_CONTINUOUS_SEARCH) so a +75° profile prefers same-angle gallery
+    faces over frontal ones.
     """
     if not embeddings:
-        return []
+        return [], {}
 
     top_k = max(2, int(settings.IDENTITY_TOP_K))
     params: dict = {"top_k": top_k}
@@ -68,29 +73,55 @@ async def _search_faces_batch(
         params[f"emb_{i}"] = str(emb)
         if pose_bins:
             params[f"pose_{i}"] = pose_bins[i]
+            params[f"yaw_{i}"] = (
+                yaws[i] if (yaws and yaws[i] is not None) else None
+            )
 
     values_sql = ", ".join(
         rf"({i}, (:emb_{i})\:\:vector)" for i in range(len(embeddings))
     )
 
     if pose_bins:
-        # Pose-binned search: exact bin + frontal fallback + unknown fallback
+        use_yaw = settings.POSE_CONTINUOUS_SEARCH
+        # Pose-binned search: exact bin + frontal fallback + unknown fallback,
+        # optionally refined by continuous yaw angular distance.
         pose_values = ", ".join(
-            rf"({i}, :pose_{i})" for i in range(len(embeddings))
+            rf"({i}, (:pose_{i})\:\:text, (:yaw_{i})\:\:double precision)"
+            for i in range(len(embeddings))
         )
+        if use_yaw:
+            order_case = """
+                    CASE
+                        WHEN p.yaw IS NOT NULL AND vf.yaw IS NOT NULL
+                             AND ABS(vf.yaw - p.yaw) < 15 THEN 1
+                        WHEN p.yaw IS NOT NULL AND vf.yaw IS NOT NULL
+                             AND ABS(vf.yaw - p.yaw) < 35 THEN 2
+                        WHEN vf.pose_bin = p.pose_bin THEN 3
+                        WHEN vf.pose_bin = 'frontal' THEN 4
+                        ELSE 5
+                    END,"""
+        else:
+            order_case = """
+                    CASE
+                        WHEN vf.pose_bin = p.pose_bin THEN 1
+                        WHEN vf.pose_bin = 'frontal' THEN 2
+                        ELSE 3
+                    END,"""
         query = text(rf"""
             WITH input_faces AS (
                 SELECT idx, emb FROM (VALUES {values_sql}) AS v(idx, emb)
             ),
             input_poses AS (
-                SELECT idx, pose_bin FROM (VALUES {pose_values}) AS p(idx, pose_bin)
+                SELECT idx, pose_bin, yaw
+                FROM (VALUES {pose_values}) AS p(idx, pose_bin, yaw)
             )
-            SELECT f.idx, m.visitor_id, m.similarity
+            SELECT f.idx, m.visitor_id, m.similarity, m.personal_threshold
             FROM input_faces f
             JOIN input_poses p ON p.idx = f.idx
             CROSS JOIN LATERAL (
                 SELECT vf.visitor_id,
-                       1 - (vf.embedding <=> f.emb) AS similarity
+                       1 - (vf.embedding <=> f.emb) AS similarity,
+                       vis.personal_returning_threshold AS personal_threshold
                 FROM visitor_faces vf
                 JOIN visitors vis ON vis.id = vf.visitor_id
                 WHERE vis.is_active = TRUE
@@ -100,12 +131,7 @@ async def _search_faces_batch(
                       OR vf.pose_bin = 'frontal'
                       OR vf.pose_bin = 'unknown'
                   )
-                ORDER BY
-                    CASE
-                        WHEN vf.pose_bin = p.pose_bin THEN 1
-                        WHEN vf.pose_bin = 'frontal' THEN 2
-                        ELSE 3
-                    END,
+                ORDER BY{order_case}
                     vf.embedding <=> f.emb
                 LIMIT :top_k
             ) m
@@ -113,11 +139,12 @@ async def _search_faces_batch(
         """)
     else:
         query = text(rf"""
-            SELECT v.idx, m.visitor_id, m.similarity
+            SELECT v.idx, m.visitor_id, m.similarity, m.personal_threshold
             FROM (VALUES {values_sql}) AS v(idx, emb)
             CROSS JOIN LATERAL (
                 SELECT vf.visitor_id,
-                       1 - (vf.embedding <=> v.emb) AS similarity
+                       1 - (vf.embedding <=> v.emb) AS similarity,
+                       vis.personal_returning_threshold AS personal_threshold
                 FROM visitor_faces vf
                 JOIN visitors vis ON vis.id = vf.visitor_id
                 WHERE vis.is_active = TRUE
@@ -130,9 +157,12 @@ async def _search_faces_batch(
 
     result = await db.execute(query, params)
     grouped: List[List[Tuple[UUID, float]]] = [[] for _ in embeddings]
+    threshold_map: dict = {}
     for row in result.all():
         grouped[int(row.idx)].append((row.visitor_id, float(row.similarity)))
-    return grouped
+        if row.personal_threshold is not None:
+            threshold_map[row.visitor_id] = float(row.personal_threshold)
+    return grouped, threshold_map
 
 
 async def _search_body(embedding: List[float], db: AsyncSession) -> Optional[Tuple[UUID, float]]:
@@ -169,6 +199,7 @@ def _best_per_visitor(
 def _decide_from_face(
     matches: List[Tuple[UUID, float]],
     threshold_offset: float = 0.0,
+    threshold_map: Optional[dict] = None,
 ) -> ResolutionResult:
     """Apply thresholds + (visitor-level) ambiguity gate to one face's matches."""
     if not matches:
@@ -178,8 +209,14 @@ def _decide_from_face(
     top_id, top_sim = collapsed[0]
     runner_up = collapsed[1] if len(collapsed) > 1 else None  # a different visitor
 
-    # Masked faces get a loosened returning threshold (offset is negative).
-    effective_threshold = settings.RETURNING_FACE_THRESHOLD + threshold_offset
+    # Returning bar: the top visitor's personal threshold (if computed) else the
+    # global one. Masked faces additionally loosen it (offset is negative).
+    base_threshold = settings.RETURNING_FACE_THRESHOLD
+    if threshold_map:
+        personal = threshold_map.get(top_id)
+        if personal is not None:
+            base_threshold = personal
+    effective_threshold = base_threshold + threshold_offset
 
     if top_sim >= effective_threshold:
         if (
@@ -221,7 +258,7 @@ async def resolve_batch(
     Resolve a list of detected faces in one DB round-trip.
 
     faces: [{"face_embedding": [...], "body_embedding": [...] | None,
-             "det_score": float, "pose_bin": str | None}].
+             "det_score": float, "pose_bin": str | None, "yaw": float | None}].
     Returns one ResolutionResult per input face, in order.
     """
     if not faces:
@@ -229,11 +266,18 @@ async def resolve_batch(
 
     face_embeddings = [f["face_embedding"] for f in faces]
     pose_bins = [f.get("pose_bin") or "unknown" for f in faces]
-    grouped = await _search_faces_batch(face_embeddings, db, pose_bins=pose_bins)
+    yaws = [f.get("yaw") for f in faces]
+    grouped, threshold_map = await _search_faces_batch(
+        face_embeddings, db, pose_bins=pose_bins, yaws=yaws
+    )
 
     results: List[ResolutionResult] = []
     for face, matches in zip(faces, grouped):
-        res = _decide_from_face(matches, threshold_offset=face.get("threshold_offset", 0.0))
+        res = _decide_from_face(
+            matches,
+            threshold_offset=face.get("threshold_offset", 0.0),
+            threshold_map=threshold_map,
+        )
 
         # Grey-zone body fallback (same-session re-acquisition only, opt-in).
         if (

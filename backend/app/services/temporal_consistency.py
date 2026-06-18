@@ -14,23 +14,14 @@ from uuid import UUID
 import numpy as np
 
 from app.config import settings
+from app.geometry import bbox_center
+from app.similarity import cosine_similarity as _cosine_sim
 
 
 def _bbox_center_distance(b1: dict, b2: dict) -> float:
-    c1x = (b1["x1"] + b1["x2"]) / 2.0
-    c1y = (b1["y1"] + b1["y2"]) / 2.0
-    c2x = (b2["x1"] + b2["x2"]) / 2.0
-    c2y = (b2["y1"] + b2["y2"]) / 2.0
+    c1x, c1y = bbox_center(b1)
+    c2x, c2y = bbox_center(b2)
     return float(np.sqrt((c1x - c2x) ** 2 + (c1y - c2y) ** 2))
-
-
-def _cosine_sim(a: list, b: list) -> float:
-    va = np.asarray(a, dtype=np.float32)
-    vb = np.asarray(b, dtype=np.float32)
-    denom = (np.linalg.norm(va) * np.linalg.norm(vb))
-    if denom < 1e-9:
-        return 0.0
-    return float(np.dot(va, vb) / denom)
 
 
 class TemporalConsistencyGate:
@@ -58,6 +49,7 @@ class TemporalConsistencyGate:
         bbox: dict,
         timestamp: datetime,
         confidence: float,
+        camera_id: Optional[str] = None,
     ) -> None:
         """Record a confirmed detection."""
         self._evict_old(timestamp)
@@ -68,6 +60,7 @@ class TemporalConsistencyGate:
                 "bbox": bbox,
                 "timestamp": timestamp,
                 "confidence": confidence,
+                "camera_id": camera_id,
             }
         )
 
@@ -76,10 +69,16 @@ class TemporalConsistencyGate:
         new_embedding: list,
         new_bbox: dict,
         timestamp: datetime,
+        camera_id: Optional[str] = None,
     ) -> Optional[UUID]:
         """
         Return visitor_id if this 'new' detection looks like a recently seen
         visitor who temporarily disappeared; None otherwise.
+
+        Pixel proximity is only meaningful WITHIN one camera (different cameras
+        have different resolutions/FOVs), so when camera_id is given we only
+        consider same-camera entries. Cross-camera re-identification is handled
+        separately by cross_camera_resolver, which uses topology + embeddings.
         """
         if not new_embedding:
             return None
@@ -95,6 +94,10 @@ class TemporalConsistencyGate:
             if entry["timestamp"] < cutoff:
                 continue
             if not entry.get("embedding"):
+                continue
+            # Only compare detections from the same camera (pixel distance is
+            # camera-specific). Legacy callers passing no camera_id match any.
+            if camera_id is not None and entry.get("camera_id") not in (None, camera_id):
                 continue
 
             px_dist = _bbox_center_distance(new_bbox, entry["bbox"])

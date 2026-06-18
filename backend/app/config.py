@@ -253,6 +253,39 @@ class Settings(BaseSettings):
     # ── Cascade (skip body when face is strong) ──────────────
     FACE_CONF_SKIP_BODY: float = 0.60
 
+    # ── Multi-angle identity (Phase 3) ───────────────────────
+    # Rank gallery candidates by continuous head-pose angular distance (yaw)
+    # before vector distance, so a side-angle query prefers same-angle gallery
+    # faces of the right person over frontal faces of the wrong person.
+    POSE_CONTINUOUS_SEARCH: bool = True
+    # Use per-visitor adaptive returning thresholds derived from each visitor's
+    # gallery similarity distribution (loosen only for high-variance visitors).
+    ADAPTIVE_VISITOR_THRESHOLDS: bool = True
+    # Tracklet buffer: hold grey-zone / first-sighting faces across a short window
+    # and resolve once, so a single bad frame can't create a duplicate visitor.
+    TRACKLET_ENABLED: bool = True
+    TRACKLET_WINDOW_SECONDS: float = 2.0
+    # Associate a detection with an open tracklet when bbox centres are within
+    # this many pixels (same camera) — a coarse same-body proxy.
+    TRACKLET_MAX_PIXEL_DISTANCE: float = 160.0
+    # Require at least this many observations before a tracklet that never matched
+    # a known visitor is allowed to register a NEW visitor.
+    TRACKLET_MIN_OBSERVATIONS_NEW: int = 2
+
+    # ── Cross-camera identity (Phase 4) ──────────────────────
+    # Master switch. Keep OFF until camera topology + review workflow are set up;
+    # the camera-aware temporal gate and candidate check are inert when disabled.
+    CROSS_CAMERA_ENABLED: bool = False
+    # How far back to search other cameras' recent visitors before creating a new
+    # visitor (a person walking between cameras reappears within this window).
+    CROSS_CAMERA_LOOKBACK_SECONDS: float = 180.0
+    # Face-similarity bands for the cross-camera candidate / reconciliation logic.
+    CROSS_CAMERA_REVIEW_THRESHOLD: float = 0.52   # queue for human review
+    CROSS_CAMERA_AUTO_THRESHOLD: float = 0.68     # accept as returning live
+    CROSS_CAMERA_AUTO_MERGE_THRESHOLD: float = 0.72  # auto-merge duplicate records
+    # Background reconciliation sweep cadence (0 disables the loop).
+    CROSS_CAMERA_DEDUP_INTERVAL_MINUTES: int = 5
+
     # ── Redis (for multi-worker visit state) ─────────────────
     REDIS_ENABLED: bool = False
     REDIS_URL: str = "redis://localhost:6379/0"

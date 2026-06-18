@@ -78,3 +78,14 @@ async def analytics_detection_quality(
 ):
     """Detection quality band breakdown (high / medium / low confidence)."""
     return await analytics_service.detection_quality_report(db, since, until)
+
+
+@router.get("/pipeline-quality")
+async def analytics_pipeline_quality(
+    since: Optional[datetime] = Query(None),
+    until: Optional[datetime] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    _key: str = Security(verify_api_key),
+):
+    """Decision-pipeline health: grey-zone / ambiguous rates + recovery counts."""
+    return await analytics_service.pipeline_quality(db, since, until)

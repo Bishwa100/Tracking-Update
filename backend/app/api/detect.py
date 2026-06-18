@@ -16,8 +16,7 @@ from app.utils import (
     cap_frame_long_side,
     extract_video_frames,
     file_to_cv_image,
-    frame_signature,
-    frames_are_similar,
+    FrameDedupBuffer,
     is_video_upload,
     run_inference,
 )
@@ -53,15 +52,11 @@ async def detect(
 
     all_detections = []
     frames_processed = 0
-    prev_sig = None
+    dedup = FrameDedupBuffer(enabled=settings.FRAME_DEDUP_ENABLED and len(frames) > 1)
 
     for frame in frames:
-        if settings.FRAME_DEDUP_ENABLED and len(frames) > 1:
-            sig = frame_signature(frame)
-            if frames_are_similar(prev_sig, sig, settings.FRAME_DEDUP_MAD_THRESHOLD):
-                prev_sig = sig
-                continue
-            prev_sig = sig
+        if dedup.is_duplicate(frame):
+            continue
 
         detections = await run_inference(process_frame, frame, settings.ALLOW_BODY_FALLBACK)
         frames_processed += 1

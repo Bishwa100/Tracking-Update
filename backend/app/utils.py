@@ -167,6 +167,42 @@ def frames_are_similar(
     return float(np.mean(np.abs(sig_a - sig_b))) < threshold
 
 
+class FrameDedupBuffer:
+    """
+    Stateful frame de-duplication. Owns the previous frame signature and the
+    threshold so the live-camera and upload paths share one implementation
+    instead of each tracking their own `prev_sig`.
+
+    Usage:
+        dedup = FrameDedupBuffer()
+        if dedup.is_duplicate(frame):   # near-identical to the previous frame
+            continue                    # skip the heavy detection pass
+    """
+
+    def __init__(self, threshold: Optional[float] = None, enabled: Optional[bool] = None):
+        self._threshold = (
+            settings.FRAME_DEDUP_MAD_THRESHOLD if threshold is None else threshold
+        )
+        self._enabled = settings.FRAME_DEDUP_ENABLED if enabled is None else enabled
+        self._prev_sig: Optional[np.ndarray] = None
+        self.skipped = 0
+        self.processed = 0
+
+    def is_duplicate(self, frame: np.ndarray) -> bool:
+        """Update state and return True when `frame` ~ the previous frame."""
+        if not self._enabled:
+            self.processed += 1
+            return False
+        sig = frame_signature(frame)
+        dup = frames_are_similar(self._prev_sig, sig, self._threshold)
+        self._prev_sig = sig
+        if dup:
+            self.skipped += 1
+        else:
+            self.processed += 1
+        return dup
+
+
 def cv_image_to_base64(image: np.ndarray, fmt: str = ".jpg", quality: int = 85) -> str:
     """Encode an OpenCV BGR image to a base64 string."""
     params = [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)] if fmt in (".jpg", ".jpeg") else []
@@ -186,13 +222,8 @@ def encode_jpeg(image: np.ndarray, quality: int = 85) -> bytes:
     return buffer.tobytes()
 
 
-def normalize_embedding(embedding: np.ndarray) -> List[float]:
-    """L2-normalize an embedding vector and convert to a Python list."""
-    arr = np.asarray(embedding, dtype=np.float32)
-    norm = np.linalg.norm(arr)
-    if norm == 0:
-        return arr.tolist()
-    return (arr / norm).tolist()
+# Re-exported from app.similarity to keep one normalization implementation.
+from app.similarity import normalize_embedding  # noqa: E402,F401
 
 
 # Status → BGR colour for annotated detection boxes.

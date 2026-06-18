@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, UserPlus, UserCheck } from "lucide-react";
+import { AlertTriangle, UserPlus, UserCheck, Clock, PauseCircle, Camera } from "lucide-react";
 
 import type { ActivityEvent } from "@/lib/types";
 import { formatTime, shortId } from "@/lib/format";
@@ -7,13 +7,24 @@ import { Badge } from "@/components/ui";
 
 function EventIcon({ ev }: { ev: ActivityEvent }) {
   if (ev.is_ambiguous) return <AlertTriangle className="h-4 w-4 text-warning" />;
+  if (ev.match_source === "grey_zone")
+    return <PauseCircle className="h-4 w-4 text-text-muted" />;
   if (ev.is_new_visitor) return <UserPlus className="h-4 w-4 text-success" />;
+  if (ev.match_source === "cross_camera")
+    return <Camera className="h-4 w-4 text-accent-bright" />;
+  if (ev.match_source === "temporal" || ev.match_source === "tracklet")
+    return <Clock className="h-4 w-4 text-primary" />;
   return <UserCheck className="h-4 w-4 text-primary" />;
 }
 
 function label(ev: ActivityEvent) {
   if (ev.is_ambiguous) return <Badge tone="warning">Ambiguous</Badge>;
+  if (ev.match_source === "grey_zone") return <Badge tone="neutral">Held</Badge>;
   if (ev.is_new_visitor) return <Badge tone="success">New</Badge>;
+  if (ev.match_source === "cross_camera")
+    return <Badge tone="accent">Cross-camera</Badge>;
+  if (ev.match_source === "temporal" || ev.match_source === "tracklet")
+    return <Badge tone="primary">Re-acquired</Badge>;
   return <Badge tone="primary">Recognized</Badge>;
 }
 

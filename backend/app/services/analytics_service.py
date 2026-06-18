@@ -222,3 +222,56 @@ async def detection_quality_report(
         "pct_low": round(bands["low"] / total, 4),
         "total_detections": total,
     }
+
+
+async def pipeline_quality(
+    db: AsyncSession,
+    since: Optional[datetime],
+    until: Optional[datetime],
+) -> dict:
+    """
+    Decision-pipeline health for the period (Phase 1–4 observability):
+      • grey_zone_rate  — held grey-zone detections / total (should trend → 0 as
+        the gallery learns; a high value means lots of near-misses being held).
+      • ambiguous_rate  — detections skipped to avoid a false merge.
+      • temporal / cross_camera / tracklet recoveries — same person re-attached
+        instead of fragmented into a new record.
+      • new_registrations — visitors created in the period.
+    """
+    since, until = _range(since, until)
+    rows = (await db.execute(text("""
+        SELECT COALESCE(match_source, 'none') AS src,
+               is_ambiguous,
+               is_new_visitor,
+               COUNT(*) AS n
+        FROM detection_events
+        WHERE detected_at >= :since AND detected_at < :until
+        GROUP BY src, is_ambiguous, is_new_visitor
+    """), {"since": since, "until": until})).all()
+
+    total = 0
+    by_source: dict[str, int] = {}
+    ambiguous = 0
+    new_regs = 0
+    for r in rows:
+        total += r.n
+        by_source[r.src] = by_source.get(r.src, 0) + r.n
+        if r.is_ambiguous:
+            ambiguous += r.n
+        if r.is_new_visitor:
+            new_regs += r.n
+
+    denom = total or 1
+    grey = by_source.get("grey_zone", 0)
+    return {
+        "total_detections": total,
+        "by_source": by_source,
+        "grey_zone": grey,
+        "grey_zone_rate": round(grey / denom, 4),
+        "ambiguous": ambiguous,
+        "ambiguous_rate": round(ambiguous / denom, 4),
+        "temporal_recoveries": by_source.get("temporal", 0),
+        "cross_camera_recoveries": by_source.get("cross_camera", 0),
+        "tracklet_recoveries": by_source.get("tracklet", 0),
+        "new_registrations": new_regs,
+    }

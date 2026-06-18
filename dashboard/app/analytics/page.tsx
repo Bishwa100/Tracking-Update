@@ -25,6 +25,18 @@ import { formatDuration } from "@/lib/format";
 
 type RangeKey = "today" | "week" | "month";
 
+interface PipelineQuality {
+  total_detections: number;
+  grey_zone: number;
+  grey_zone_rate: number;
+  ambiguous: number;
+  ambiguous_rate: number;
+  temporal_recoveries: number;
+  cross_camera_recoveries: number;
+  tracklet_recoveries: number;
+  new_registrations: number;
+}
+
 function sinceFor(key: RangeKey): string {
   const d = new Date();
   if (key === "today") d.setHours(0, 0, 0, 0);
@@ -48,6 +60,10 @@ export default function AnalyticsPage() {
   const { data: freq } = useSWR<FrequencyDistribution>("analytics/frequency", fetcher);
   const { data: hourly } = useSWR<HourlyBreakdown>(`analytics/hourly?since=${since}`, fetcher);
   const { data: top } = useSWR<TopVisitor[]>("analytics/top-visitors?limit=5", fetcher);
+  const { data: pipeline } = useSWR<PipelineQuality>(
+    `analytics/pipeline-quality?since=${since}`,
+    fetcher,
+  );
 
   const cw = summary?.confidence_weighted;
   const freqData = freq
@@ -129,6 +145,40 @@ export default function AnalyticsPage() {
           <HourlyStackedBar data={hourly?.hourly ?? []} />
         </Card>
       </div>
+
+      {pipeline && (
+        <Card>
+          <CardTitle>Pipeline Health (decision quality)</CardTitle>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <StatCard
+              label="Grey-zone held"
+              value={`${(pipeline.grey_zone_rate * 100).toFixed(1)}%`}
+              hint={`${pipeline.grey_zone.toLocaleString()} of ${pipeline.total_detections.toLocaleString()}`}
+              tone="warning"
+            />
+            <StatCard
+              label="Ambiguous"
+              value={`${(pipeline.ambiguous_rate * 100).toFixed(1)}%`}
+              hint={`${pipeline.ambiguous.toLocaleString()} skipped`}
+            />
+            <StatCard
+              label="Re-acquired"
+              value={(
+                pipeline.temporal_recoveries +
+                pipeline.cross_camera_recoveries +
+                pipeline.tracklet_recoveries
+              ).toLocaleString()}
+              hint={`${pipeline.cross_camera_recoveries} cross-camera`}
+              tone="accent"
+            />
+            <StatCard
+              label="New registrations"
+              value={pipeline.new_registrations.toLocaleString()}
+              tone="success"
+            />
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card>

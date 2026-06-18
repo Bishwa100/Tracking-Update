@@ -51,6 +51,30 @@ _PATCHABLE = {
     "YOLO_PERSON_CONFIDENCE",
     "MIN_FACE_DET_SCORE",
     "FACE_QUALITY_CUTOFF",
+    # ── Multi-angle identity (Phase 3) ──
+    "POSE_CONTINUOUS_SEARCH",
+    "ADAPTIVE_VISITOR_THRESHOLDS",
+    "IDENTITY_TOP_K",
+    "GREY_ZONE_POLICY",
+    "TRACKLET_ENABLED",
+    "TRACKLET_WINDOW_SECONDS",
+    "TRACKLET_MAX_PIXEL_DISTANCE",
+    "TRACKLET_MIN_OBSERVATIONS_NEW",
+    # ── Cross-camera identity (Phase 4) ──
+    # NOTE: toggling CROSS_CAMERA_ENABLED live enables the per-detection candidate
+    # check immediately; the background reconciliation loop is only (re)started on
+    # app startup. FACE_CACHE_* and CROSS_CAMERA_DEDUP_INTERVAL_MINUTES are
+    # intentionally NOT patchable (they change cache/loop structure → need restart).
+    "CROSS_CAMERA_ENABLED",
+    "CROSS_CAMERA_LOOKBACK_SECONDS",
+    "CROSS_CAMERA_REVIEW_THRESHOLD",
+    "CROSS_CAMERA_AUTO_THRESHOLD",
+    "CROSS_CAMERA_AUTO_MERGE_THRESHOLD",
+}
+
+# String-enum settings: restrict patch values to a known set.
+_ENUM_CHOICES: Dict[str, set] = {
+    "GREY_ZONE_POLICY": {"review", "tracklet", "register"},
 }
 
 
@@ -62,6 +86,11 @@ class SettingsPatch(BaseModel):
         bad = set(self.updates) - _PATCHABLE
         if bad:
             raise ValueError(f"Non-patchable or unknown keys: {sorted(bad)}")
+        for key, choices in _ENUM_CHOICES.items():
+            if key in self.updates and self.updates[key] not in choices:
+                raise ValueError(
+                    f"{key} must be one of {sorted(choices)}; got {self.updates[key]!r}"
+                )
         return self
 
 
@@ -253,6 +282,118 @@ async def clean_visitor_faces(
     import uuid
     from app.services.auto_enroller import clean_visitor_gallery
     return await clean_visitor_gallery(db, uuid.UUID(visitor_id))
+
+
+# ── Camera topology (Phase 4 cross-camera) ───────────────────
+
+class CameraTopologyUpsert(BaseModel):
+    camera_a: str
+    camera_b: str
+    min_travel_seconds: Optional[float] = None
+    max_expected_seconds: Optional[float] = None
+    transition_enabled: bool = True
+
+    @model_validator(mode="after")
+    def check(self) -> "CameraTopologyUpsert":
+        if not self.camera_a.strip() or not self.camera_b.strip():
+            raise ValueError("camera_a and camera_b are required.")
+        if self.camera_a.strip() == self.camera_b.strip():
+            raise ValueError("camera_a and camera_b must differ.")
+        return self
+
+
+@router.get("/cameras")
+async def list_known_cameras(
+    _key: str = Security(verify_admin_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Distinct camera ids seen in detections/visits, for topology dropdowns."""
+    ids: set[str] = {settings.CAMERA_ID}
+    for tbl in ("detection_events", "visits"):
+        try:
+            rows = (await db.execute(
+                text(f"SELECT DISTINCT camera_id FROM {tbl} WHERE camera_id IS NOT NULL")
+            )).all()
+            ids.update(r.camera_id for r in rows if r.camera_id)
+        except Exception:
+            pass
+    return sorted(ids)
+
+
+@router.get("/camera-topology")
+async def list_camera_topology(
+    _key: str = Security(verify_admin_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """List configured camera-transition constraints."""
+    from app.models import CameraTopology
+    from sqlalchemy import select
+
+    try:
+        rows = (await db.execute(select(CameraTopology))).scalars().all()
+    except Exception:
+        return []
+    return [
+        {
+            "id": str(r.id),
+            "camera_a": r.camera_a,
+            "camera_b": r.camera_b,
+            "min_travel_seconds": r.min_travel_seconds,
+            "max_expected_seconds": r.max_expected_seconds,
+            "transition_enabled": r.transition_enabled,
+        }
+        for r in rows
+    ]
+
+
+@router.post("/camera-topology")
+async def upsert_camera_topology(
+    body: CameraTopologyUpsert,
+    _key: str = Security(verify_admin_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create or update a camera-pair transition constraint (unique by pair)."""
+    import uuid
+    from app.models import CameraTopology
+    from sqlalchemy import select, or_, and_
+
+    a, b = body.camera_a.strip(), body.camera_b.strip()
+    existing = (
+        await db.execute(
+            select(CameraTopology).where(
+                or_(
+                    and_(CameraTopology.camera_a == a, CameraTopology.camera_b == b),
+                    and_(CameraTopology.camera_a == b, CameraTopology.camera_b == a),
+                )
+            )
+        )
+    ).scalars().first()
+
+    if existing is None:
+        existing = CameraTopology(id=uuid.uuid4(), camera_a=a, camera_b=b)
+        db.add(existing)
+    existing.min_travel_seconds = body.min_travel_seconds
+    existing.max_expected_seconds = body.max_expected_seconds
+    existing.transition_enabled = body.transition_enabled
+    await db.commit()
+    return {"id": str(existing.id), "camera_a": a, "camera_b": b}
+
+
+@router.delete("/camera-topology/{topology_id}")
+async def delete_camera_topology(
+    topology_id: str,
+    _key: str = Security(verify_admin_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a camera-transition constraint."""
+    import uuid
+    from app.models import CameraTopology
+
+    obj = await db.get(CameraTopology, uuid.UUID(topology_id))
+    if obj is not None:
+        await db.delete(obj)
+        await db.commit()
+    return {"success": obj is not None, "id": topology_id}
 
 
 @router.post("/settings/reload")

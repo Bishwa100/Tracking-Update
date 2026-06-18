@@ -386,10 +386,13 @@ class ModelManager:
         results: List[dict] = []
         for face in faces:
             x1, y1, x2, y2 = face.bbox.astype(int)
+            kps = getattr(face, "kps", None)
             results.append({
                 "embedding": face.normed_embedding,
                 "bbox": {"x1": int(x1), "y1": int(y1), "x2": int(x2), "y2": int(y2)},
                 "det_score": float(face.det_score),
+                # 5-point landmarks — needed downstream for head-pose estimation.
+                "kps": np.asarray(kps) if kps is not None else None,
             })
         return results
 
@@ -432,6 +435,8 @@ class ModelManager:
                 "embedding": embedding,
                 "bbox": {"x1": int(x1), "y1": int(y1), "x2": int(x2), "y2": int(y2)},
                 "det_score": det_score,
+                # 5-point landmarks from the detector — for head-pose estimation.
+                "kps": np.asarray(kpss[i]),
             })
         return results
 

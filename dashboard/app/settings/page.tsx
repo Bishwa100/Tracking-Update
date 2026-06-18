@@ -14,6 +14,7 @@ import {
   ErrorState,
   Input,
   PageHeader,
+  Select,
   Skeleton,
   Toggle,
 } from "@/components/ui";
@@ -64,7 +65,39 @@ const GROUPS: { title: string; keys: string[] }[] = [
     title: "Mask & Auto-Tuning",
     keys: ["MASK_DETECTION_ENABLED", "MASKED_FACE_THRESHOLD_OFFSET", "AUTO_TUNING_ENABLED"],
   },
+  {
+    title: "Multi-Angle Identity",
+    keys: [
+      "GREY_ZONE_POLICY",
+      "POSE_CONTINUOUS_SEARCH",
+      "ADAPTIVE_VISITOR_THRESHOLDS",
+      "IDENTITY_TOP_K",
+      "TRACKLET_ENABLED",
+      "TRACKLET_WINDOW_SECONDS",
+      "TRACKLET_MAX_PIXEL_DISTANCE",
+      "TRACKLET_MIN_OBSERVATIONS_NEW",
+    ],
+  },
+  {
+    title: "Cross-Camera",
+    keys: [
+      "CROSS_CAMERA_ENABLED",
+      "CROSS_CAMERA_LOOKBACK_SECONDS",
+      "CROSS_CAMERA_REVIEW_THRESHOLD",
+      "CROSS_CAMERA_AUTO_THRESHOLD",
+      "CROSS_CAMERA_AUTO_MERGE_THRESHOLD",
+    ],
+  },
 ];
+
+// String-enum settings rendered as a dropdown instead of a number input.
+const SELECT_OPTIONS: Record<string, { value: string; label: string }[]> = {
+  GREY_ZONE_POLICY: [
+    { value: "review", label: "review — hold + audit (safe default)" },
+    { value: "tracklet", label: "tracklet — confirm across frames" },
+    { value: "register", label: "register — legacy (create new)" },
+  ],
+};
 
 function prettyLabel(key: string): string {
   return key
@@ -205,7 +238,7 @@ export default function SettingsPage() {
   const dirtyKeys = Object.keys(edits).filter((k) => edits[k] !== data?.[k]);
   const dirty = dirtyKeys.length > 0;
 
-  function setVal(key: string, value: number | boolean) {
+  function setVal(key: string, value: number | boolean | string) {
     setEdits((e) => ({ ...e, [key]: value }));
     setSaved(false);
   }
@@ -288,6 +321,8 @@ export default function SettingsPage() {
                   {present.map((key) => {
                     const val = merged[key];
                     const isBool = typeof val === "boolean";
+                    const isString = typeof val === "string";
+                    const selectOpts = SELECT_OPTIONS[key];
                     const isDirty = dirtyKeys.includes(key);
                     return (
                       <div
@@ -304,6 +339,14 @@ export default function SettingsPage() {
                             checked={val as boolean}
                             onChange={(v) => setVal(key, v)}
                           />
+                        ) : isString && selectOpts ? (
+                          <div className="w-56">
+                            <Select
+                              value={val as string}
+                              options={selectOpts}
+                              onChange={(v) => setVal(key, v)}
+                            />
+                          </div>
                         ) : (
                           <div className="w-28">
                             <Input

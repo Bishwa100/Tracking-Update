@@ -64,6 +64,15 @@ class Visitor(Base):
     # Recognition confidence (0.3 = tentative, 1.0 = confirmed staff/explicit)
     visit_confidence = Column(Float, nullable=True, default=0.3)
 
+    # Per-visitor adaptive thresholds (Phase 3). Computed from the gallery's
+    # pairwise similarity distribution: visitors with high within-person variance
+    # (mixed angles / masks / lighting) get a lower personal returning threshold
+    # so they don't fragment, without loosening the global threshold for everyone.
+    expected_match_similarity = Column(Float, nullable=True)
+    match_similarity_std = Column(Float, nullable=True)
+    personal_returning_threshold = Column(Float, nullable=True)
+    personal_new_threshold = Column(Float, nullable=True)
+
     faces = relationship(
         "VisitorFace", back_populates="visitor", cascade="all, delete-orphan"
     )
@@ -110,6 +119,13 @@ class VisitorFace(Base):
     crop_path = Column(Text, nullable=True)  # tight face crop on disk (for re-scoring)
     clarity_score = Column(Float, nullable=True)  # cached "clearly visible" score, 0–1
     pose_bin = Column(String(20), nullable=True, default="unknown")
+    # Continuous head pose (Phase 3) — finer-grained than the coarse pose_bin, so
+    # search can rank by angular distance (a +30° and a +75° profile are both
+    # "right" but embed very differently).
+    yaw = Column(Float, nullable=True)
+    pitch = Column(Float, nullable=True)
+    roll = Column(Float, nullable=True)
+    source_camera_id = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
     visitor = relationship("Visitor", back_populates="faces")
@@ -195,4 +211,40 @@ class DetectionEvent(Base):
     __table_args__ = (
         Index("idx_de_visitor", visitor_id, detected_at.desc()),
         Index("idx_de_datetime", detected_at.desc()),
+    )
+
+
+class CameraTopology(Base):
+    """Pairwise transition constraints between cameras (Phase 4 cross-camera)."""
+
+    __tablename__ = "camera_topology"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    camera_a = Column(Text, nullable=False)
+    camera_b = Column(Text, nullable=False)
+    min_travel_seconds = Column(Float, nullable=True)
+    max_expected_seconds = Column(Float, nullable=True)
+    transition_enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        Index("idx_camera_topology_pair", camera_a, camera_b, unique=True),
+    )
+
+
+class VisitorMergeAudit(Base):
+    """Append-only audit of every visitor merge (manual / auto / cross-camera)."""
+
+    __tablename__ = "visitor_merge_audit"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    source_visitor_id = Column(UUID(as_uuid=True), nullable=True)
+    target_visitor_id = Column(UUID(as_uuid=True), nullable=True)
+    reason = Column(Text, nullable=True)
+    similarity = Column(Float, nullable=True)
+    merged_by = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        Index("idx_merge_audit_target", target_visitor_id),
     )

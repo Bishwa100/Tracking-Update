@@ -79,6 +79,45 @@ def test_masked_offset_loosens_returning_threshold():
     assert matched.match_source == "face"
 
 
+def test_personal_threshold_loosens_returning_for_high_variance_visitor():
+    a = uuid4()
+    # 0.50 is grey-zone globally (0.55) but RETURNING for a visitor whose personal
+    # threshold was lowered to 0.48 by their gallery variance.
+    held = ir._decide_from_face([(a, 0.50)], threshold_map={})
+    matched = ir._decide_from_face([(a, 0.50)], threshold_map={a: 0.48})
+    assert held.match_source == "grey_zone"
+    assert matched.match_source == "face"
+
+
+# ── Tracklet buffer ──────────────────────────────────────────────────────────
+
+def test_tracklet_associates_nearby_and_splits_far_and_per_camera():
+    from datetime import datetime, timezone
+    from app.services.tracklet import TrackletBuffer
+
+    now = datetime.now(timezone.utc)
+    buf = TrackletBuffer()
+    near_a = {"x1": 0, "y1": 0, "x2": 40, "y2": 80}
+    near_b = {"x1": 6, "y1": 6, "x2": 46, "y2": 86}
+    far = {"x1": 900, "y1": 900, "x2": 940, "y2": 980}
+
+    t1 = buf.get_or_create("cam-0", near_a, now)
+    assert buf.get_or_create("cam-0", near_b, now) is t1   # nearby → same tracklet
+    assert t1.observations == 2
+    assert buf.get_or_create("cam-0", far, now) is not t1  # far → new tracklet
+    assert buf.get_or_create("cam-1", near_a, now) is not t1  # other camera → new
+
+
+# ── similarity ───────────────────────────────────────────────────────────────
+
+def test_pairwise_cosine_shape_and_values():
+    from app.similarity import pairwise_cosine
+
+    pc = pairwise_cosine([[1.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+    assert pc.shape == (3,)            # 3 unordered pairs
+    assert abs(pc[0] - 1.0) < 1e-6     # first two are identical
+
+
 # ── FaceEmbeddingCache (bounded) ─────────────────────────────────────────────
 
 def test_cache_lru_eviction_caps_size():

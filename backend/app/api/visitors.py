@@ -141,6 +141,69 @@ async def get_visitor(
     )
 
 
+@router.get("/{visitor_id}/gallery-insights")
+async def get_gallery_insights(
+    visitor_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _key: str = Security(verify_api_key),
+):
+    """
+    Phase 3/4 visibility for one visitor: gallery pose coverage, which cameras
+    captured their faces, the computed per-visitor adaptive thresholds, and any
+    merges folded into this record.
+    """
+    from app.models import VisitorFace, VisitorMergeAudit
+
+    visitor = await db.get(Visitor, visitor_id)
+    if visitor is None or not visitor.is_active:
+        raise HTTPException(status_code=404, detail="Visitor not found.")
+
+    faces = (
+        await db.execute(
+            select(VisitorFace).where(VisitorFace.visitor_id == visitor_id)
+        )
+    ).scalars().all()
+
+    pose_coverage: dict[str, int] = {}
+    camera_coverage: dict[str, int] = {}
+    for f in faces:
+        pose_coverage[f.pose_bin or "unknown"] = pose_coverage.get(f.pose_bin or "unknown", 0) + 1
+        if f.source_camera_id:
+            camera_coverage[f.source_camera_id] = camera_coverage.get(f.source_camera_id, 0) + 1
+
+    merges = (
+        await db.execute(
+            select(VisitorMergeAudit)
+            .where(VisitorMergeAudit.target_visitor_id == visitor_id)
+            .order_by(VisitorMergeAudit.created_at.desc())
+            .limit(20)
+        )
+    ).scalars().all()
+
+    return {
+        "gallery_size": len(faces),
+        "pose_coverage": pose_coverage,
+        "camera_coverage": camera_coverage,
+        "adaptive_thresholds": {
+            "expected_match_similarity": visitor.expected_match_similarity,
+            "match_similarity_std": visitor.match_similarity_std,
+            "personal_returning_threshold": visitor.personal_returning_threshold,
+            "personal_new_threshold": visitor.personal_new_threshold,
+        },
+        "merges": [
+            {
+                "id": str(m.id),
+                "source_visitor_id": str(m.source_visitor_id) if m.source_visitor_id else None,
+                "reason": m.reason,
+                "similarity": m.similarity,
+                "merged_by": m.merged_by,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+            }
+            for m in merges
+        ],
+    }
+
+
 @router.get("/{visitor_id}/visits", response_model=VisitListResponse)
 async def get_visitor_visits(
     visitor_id: UUID,

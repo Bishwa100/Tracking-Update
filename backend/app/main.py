@@ -105,6 +105,23 @@ async def _retention_loop():
         await asyncio.sleep(settings.RETENTION_PURGE_INTERVAL_HOURS * 3600)
 
 
+async def _cross_camera_dedup_loop():
+    """Periodically reconcile duplicate visitors split across cameras."""
+    interval = settings.CROSS_CAMERA_DEDUP_INTERVAL_MINUTES * 60
+    if interval <= 0:
+        return
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            from app.services.cross_camera import reconcile_recent_duplicates
+            async with AsyncSessionLocal() as db:
+                result = await reconcile_recent_duplicates(db)
+                if result.get("merged") or result.get("flagged"):
+                    logger.info("Cross-camera reconcile: %s", result)
+        except Exception as exc:
+            logger.warning("Cross-camera reconcile failed: %s", exc)
+
+
 def _spawn(coro):
     task = asyncio.create_task(coro)
     _background_tasks.add(task)
@@ -154,6 +171,9 @@ async def lifespan(app: FastAPI):
 
     if settings.AUTO_TUNING_ENABLED:
         _spawn(_auto_tuning_loop())
+
+    if settings.CROSS_CAMERA_ENABLED:
+        _spawn(_cross_camera_dedup_loop())
 
     # Load persisted runtime settings from DB (migration 005) if table exists
     try:
