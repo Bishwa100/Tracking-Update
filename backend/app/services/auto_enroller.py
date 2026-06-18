@@ -335,21 +335,35 @@ async def update_after_match(
     body_embedding: Optional[list] = None,
     face_crop: Optional[np.ndarray] = None,
     pose: Optional[FacePose] = None,
+    match_source: str = "face",
 ) -> None:
     """
     Self-improvement on a confident returning match: grow the gallery, refresh
     the adaptive centroid, and update the thumbnail when a better face is seen.
 
-    Gallery growth has two paths:
+    Gallery growth paths:
     - High confidence (>= STRONG_MATCH_THRESHOLD): always add + update centroid
     - Medium confidence (>= RETURNING_FACE_THRESHOLD): add if pose-diverse + update centroid
+    - Temporal recovery (match_source="temporal"): the temporal gate already
+      confirmed the same person via similarity + spatial + time proximity, so the
+      raw gallery similarity is low (that's WHY the gate fired). Learn this hard
+      angle anyway — add if pose-diverse and refresh the centroid — otherwise the
+      system never absorbs the very angle that caused the near-miss.
     """
     if det_score < settings.FACE_QUALITY_CUTOFF:
         return
 
     added_to_gallery = False
 
-    if face_similarity >= settings.STRONG_MATCH_THRESHOLD:
+    if match_source == "temporal":
+        if await _is_diverse_embedding(db, visitor.id, face_embedding):
+            await add_face_to_gallery(
+                db, visitor.id, face_embedding, det_score, body_embedding,
+                pose=pose, face_crop=face_crop,
+            )
+            added_to_gallery = True
+        await update_centroid(db, visitor, face_embedding, det_score)
+    elif face_similarity >= settings.STRONG_MATCH_THRESHOLD:
         await add_face_to_gallery(
             db, visitor.id, face_embedding, det_score, body_embedding,
             pose=pose, face_crop=face_crop,

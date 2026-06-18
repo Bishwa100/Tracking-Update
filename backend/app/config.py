@@ -42,6 +42,22 @@ class Settings(BaseSettings):
     # creation conservative (low) avoids fragmenting one person into many
     # visitor records in the grey zone.
     NEW_VISITOR_MAX_SIMILARITY: float = 0.45
+    # Number of gallery rows fetched per face from the HNSW search. Rows are
+    # collapsed to the best score PER VISITOR before the ambiguity gate, so a
+    # value > 2 lets us compare the top visitor against the closest DIFFERENT
+    # visitor (top-2 rows can otherwise both belong to the same person, hiding
+    # the real runner-up).
+    IDENTITY_TOP_K: int = 10
+    # What to do with a "grey zone" face (REJECT_SIMILARITY < top_sim <
+    # RETURNING_FACE_THRESHOLD): it is neither a confident match nor a confident
+    # stranger, so creating a NEW visitor from it is the #1 cause of duplicate
+    # records for the same person seen at a new angle/lighting/camera.
+    #   "review"   — hold (do not register); record a grey_zone audit event.
+    #   "tracklet" — (Phase 3) buffer across frames, resolve once. Until the
+    #                tracklet buffer ships this behaves like "review".
+    #   "register" — legacy behaviour: create a NEW visitor if quality clears the
+    #                cutoff (kept only as an explicit escape hatch).
+    GREY_ZONE_POLICY: str = "review"
     # Default similarity floor for the review-queue "auto-merge duplicates" sweep.
     # Only probable_duplicate flags whose recorded similarity is >= this value are
     # mass-merged; weaker pairs stay for human review. Set conservatively (a
@@ -144,6 +160,13 @@ class Settings(BaseSettings):
         "osnet_x0_25_msmt17_combineall_256x128_amsgrad_ep150_stp60_"
         "lr0.0015_b64_fb10_softmax_labelsmooth_flip_jitter.pth"
     )
+
+    # ── Face embedding cache (dHash) ─────────────────────────
+    # The per-stream ArcFace embedding cache is bounded with LRU eviction so a
+    # 24/7 stream can't grow it without limit (OOM). ~10k entries ≈ 20 MB.
+    FACE_CACHE_MAX_ENTRIES: int = 10_000
+    # Drop cache entries older than this many seconds (0 = no TTL, LRU only).
+    FACE_CACHE_TTL_SECONDS: int = 3_600
 
     # ── CPU performance ──────────────────────────────────────
     # Math-library / torch thread count. 0 = use every physical core.

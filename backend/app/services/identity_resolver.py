@@ -2,17 +2,20 @@
 Identity resolver — decides NEW vs RETURNING for each detected face.
 
 Strategy:
-  1. Batched HNSW search over visitor_faces.embedding (top-2 per input face in a
-     single DB round-trip via VALUES + CROSS JOIN LATERAL).
+  1. Batched HNSW search over visitor_faces.embedding (top-K per input face in a
+     single DB round-trip via VALUES + CROSS JOIN LATERAL), then collapsed to the
+     best score PER VISITOR so the ambiguity runner-up is a different person.
   2. Threshold + ambiguity gate:
        top_sim >= RETURNING_FACE_THRESHOLD and clears runner-up by AMBIGUITY_MARGIN
          → RETURNING
        runner-up within AMBIGUITY_MARGIN
          → AMBIGUOUS (skip — don't risk a false merge)
-       top_sim <= NEW_VISITOR_MAX_SIMILARITY (and quality ok)
-         → NEW
-       otherwise (grey zone)
-         → optional body fallback, else NEW
+       top_sim <= REJECT_SIMILARITY
+         → NEW (confident stranger)
+       REJECT_SIMILARITY < top_sim < RETURNING_FACE_THRESHOLD (grey zone)
+         → optional body fallback, else HELD ("grey_zone") per GREY_ZONE_POLICY —
+           NOT registered as a new visitor (that fragments one person at a new
+           angle into many records).
   3. Body fallback is OFF by default and same-session only — OSNet embeddings are
      clothing dependent and must NOT be used to recognise visitors across visits.
 """
@@ -37,7 +40,7 @@ class ResolutionResult:
     is_ambiguous: bool = False
     face_similarity: float = 0.0
     body_similarity: float = 0.0
-    match_source: str = "none"  # "face" | "body" | "new" | "none"
+    match_source: str = "none"  # "face" | "body" | "new" | "grey_zone" | "none"
     # Best-scoring gallery visitor for this face, even when we DIDN'T match them
     # (i.e. a new/grey-zone decision). Lets the review queue show "similar to whom".
     top_match_id: Optional[UUID] = None
@@ -48,15 +51,19 @@ async def _search_faces_batch(
     pose_bins: Optional[List[str]] = None,
 ) -> List[List[Tuple[UUID, float]]]:
     """
-    Return the top-2 (visitor_id, similarity) matches per input face embedding,
-    in input order.  When pose_bins is provided each embedding is compared
-    against its matching pose bin first, then frontal as a fallback, then
-    unknown — giving pose-aware gallery search in a single round-trip.
+    Return the top-K (visitor_id, similarity) gallery rows per input face
+    embedding, in input order (K = settings.IDENTITY_TOP_K). The caller
+    collapses these to the best score per visitor, so K > 2 ensures the closest
+    DIFFERENT visitor is visible to the ambiguity gate even when several of the
+    nearest rows belong to the same person. When pose_bins is provided each
+    embedding is compared against its matching pose bin first, then frontal as a
+    fallback, then unknown — giving pose-aware gallery search in one round-trip.
     """
     if not embeddings:
         return []
 
-    params: dict = {}
+    top_k = max(2, int(settings.IDENTITY_TOP_K))
+    params: dict = {"top_k": top_k}
     for i, emb in enumerate(embeddings):
         params[f"emb_{i}"] = str(emb)
         if pose_bins:
@@ -100,7 +107,7 @@ async def _search_faces_batch(
                         ELSE 3
                     END,
                     vf.embedding <=> f.emb
-                LIMIT 2
+                LIMIT :top_k
             ) m
             ORDER BY f.idx, m.similarity DESC
         """)
@@ -116,7 +123,7 @@ async def _search_faces_batch(
                 WHERE vis.is_active = TRUE
                   AND vis.consent_status != 'opted_out'
                 ORDER BY vf.embedding <=> v.emb
-                LIMIT 2
+                LIMIT :top_k
             ) m
             ORDER BY v.idx, m.similarity DESC
         """)
@@ -143,24 +150,40 @@ async def _search_body(embedding: List[float], db: AsyncSession) -> Optional[Tup
     return row.id, float(row.similarity)
 
 
+def _best_per_visitor(
+    matches: List[Tuple[UUID, float]]
+) -> List[Tuple[UUID, float]]:
+    """
+    Collapse raw top-K gallery rows to the best similarity per visitor, sorted
+    by similarity descending. Several rows of one visitor (different pose faces)
+    count as supporting evidence for that visitor, NOT as competing candidates —
+    so the runner-up used by the ambiguity gate is always a DIFFERENT visitor.
+    """
+    best: dict = {}
+    for vid, sim in matches:
+        if vid not in best or sim > best[vid]:
+            best[vid] = sim
+    return sorted(best.items(), key=lambda kv: kv[1], reverse=True)
+
+
 def _decide_from_face(
     matches: List[Tuple[UUID, float]],
     threshold_offset: float = 0.0,
 ) -> ResolutionResult:
-    """Apply thresholds + ambiguity gate to one face's top-2 gallery matches."""
+    """Apply thresholds + (visitor-level) ambiguity gate to one face's matches."""
     if not matches:
         return ResolutionResult(is_new=True, match_source="new")
 
-    top_id, top_sim = matches[0]
-    runner_up = matches[1] if len(matches) > 1 else None
+    collapsed = _best_per_visitor(matches)
+    top_id, top_sim = collapsed[0]
+    runner_up = collapsed[1] if len(collapsed) > 1 else None  # a different visitor
 
-    # Masked faces get a loosened returning threshold
+    # Masked faces get a loosened returning threshold (offset is negative).
     effective_threshold = settings.RETURNING_FACE_THRESHOLD + threshold_offset
 
     if top_sim >= effective_threshold:
         if (
             runner_up is not None
-            and runner_up[0] != top_id
             and (top_sim - runner_up[1]) < settings.AMBIGUITY_MARGIN
         ):
             return ResolutionResult(
@@ -174,14 +197,18 @@ def _decide_from_face(
             top_match_id=top_id,
         )
 
-    if top_sim <= settings.NEW_VISITOR_MAX_SIMILARITY:
+    # Confident stranger: clearly below any known visitor → definitely NEW.
+    if top_sim <= (settings.REJECT_SIMILARITY + threshold_offset):
         return ResolutionResult(
             is_new=True, face_similarity=top_sim, match_source="new",
             top_match_id=top_id,
         )
 
+    # Grey zone (REJECT_SIMILARITY < top_sim < RETURNING_FACE_THRESHOLD): not a
+    # confident match and not a confident stranger. Hold it — registering here is
+    # the main source of duplicate records for the same person at a new angle.
     return ResolutionResult(
-        is_new=False, face_similarity=top_sim, match_source="none",
+        is_new=False, face_similarity=top_sim, match_source="grey_zone",
         top_match_id=top_id,
     )
 
@@ -210,8 +237,7 @@ async def resolve_batch(
 
         # Grey-zone body fallback (same-session re-acquisition only, opt-in).
         if (
-            res.match_source == "none"
-            and not res.is_ambiguous
+            res.match_source == "grey_zone"
             and settings.ALLOW_BODY_FALLBACK
             and face.get("body_embedding")
         ):
@@ -225,16 +251,21 @@ async def resolve_batch(
                     top_match_id=res.top_match_id,
                 )
 
-        # Grey zone with no body match → treat as a new visitor only if face
-        # quality is sufficient to seed a gallery; else drop (match_source none).
-        if res.match_source == "none" and not res.is_ambiguous:
-            if face.get("det_score", 0.0) >= settings.FACE_QUALITY_CUTOFF:
-                res = ResolutionResult(
-                    is_new=True,
-                    face_similarity=res.face_similarity,
-                    match_source="new",
-                    top_match_id=res.top_match_id,
-                )
+        # Remaining grey-zone faces are HELD by default (match_source stays
+        # "grey_zone" → detection_pipeline records an audit event and does not
+        # register a visitor). Only the explicit "register" escape hatch falls
+        # back to the legacy behaviour of seeding a new visitor.
+        if (
+            res.match_source == "grey_zone"
+            and settings.GREY_ZONE_POLICY == "register"
+            and face.get("det_score", 0.0) >= settings.FACE_QUALITY_CUTOFF
+        ):
+            res = ResolutionResult(
+                is_new=True,
+                face_similarity=res.face_similarity,
+                match_source="new",
+                top_match_id=res.top_match_id,
+            )
 
         results.append(res)
     return results

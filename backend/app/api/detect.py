@@ -63,7 +63,7 @@ async def detect(
                 continue
             prev_sig = sig
 
-        detections = await run_inference(process_frame, frame, True)
+        detections = await run_inference(process_frame, frame, settings.ALLOW_BODY_FALLBACK)
         frames_processed += 1
         if not detections:
             continue

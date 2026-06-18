@@ -184,7 +184,7 @@ class DetectionEvent(Base):
 
     is_new_visitor = Column(Boolean, nullable=False, default=False)
     is_ambiguous = Column(Boolean, nullable=False, default=False)
-    match_source = Column(String(16), nullable=True)  # "face" | "body" | "new" | "none"
+    match_source = Column(String(16), nullable=True)  # face|body|new|temporal|grey_zone|none
 
     camera_id = Column(Text, nullable=True)
     frame_path = Column(Text, nullable=True)

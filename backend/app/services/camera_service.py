@@ -339,7 +339,8 @@ class CameraService:
 
                 try:
                     detections = await run_inference(
-                        process_frame, infer_frame, True, embedding_cache
+                        process_frame, infer_frame,
+                        settings.ALLOW_BODY_FALLBACK, embedding_cache
                     )
                 except Exception as exc:
                     self.last_error = str(exc)
@@ -537,7 +538,8 @@ class CameraService:
 
                 try:
                     detections = await run_inference(
-                        process_frame, frame, True, embedding_cache
+                        process_frame, frame,
+                        settings.ALLOW_BODY_FALLBACK, embedding_cache
                     )
                 except Exception as exc:
                     self.last_error = str(exc)

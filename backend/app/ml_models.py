@@ -7,6 +7,8 @@ the device is chosen at load time and can be switched live via reload().
 
 import logging
 import os
+import time
+from collections import OrderedDict
 from typing import Optional, List
 
 # Disable Ultralytics runtime pip auto-install (see app/main.py for the full
@@ -28,22 +30,52 @@ class FaceEmbeddingCache:
     crop. A face that is pixel-stable across frames is embedded once and reused
     at zero inference cost. Exact-hash matching means a collision requires two
     visually identical aligned crops — which would embed identically anyway.
+
+    Bounded with LRU + optional TTL eviction so a 24/7 stream cannot grow it
+    without limit (the old unbounded dict was an OOM risk).
     """
 
-    def __init__(self):
-        self._store: dict[int, np.ndarray] = {}
+    def __init__(
+        self,
+        max_entries: Optional[int] = None,
+        ttl_seconds: Optional[int] = None,
+    ):
+        self._store: "OrderedDict[int, tuple[np.ndarray, float]]" = OrderedDict()
+        self._max_entries = (
+            settings.FACE_CACHE_MAX_ENTRIES if max_entries is None else max_entries
+        )
+        self._ttl = (
+            settings.FACE_CACHE_TTL_SECONDS if ttl_seconds is None else ttl_seconds
+        )
         self.hits = 0
         self.misses = 0
+        self.evictions = 0
 
     def get(self, signature: int) -> Optional[np.ndarray]:
-        emb = self._store.get(signature)
-        if emb is not None:
-            self.hits += 1
-        return emb
+        item = self._store.get(signature)
+        if item is None:
+            return None
+        embedding, inserted_at = item
+        if self._ttl and (time.monotonic() - inserted_at) > self._ttl:
+            # Expired — drop it and miss.
+            del self._store[signature]
+            self.evictions += 1
+            return None
+        self._store.move_to_end(signature)  # mark most-recently-used
+        self.hits += 1
+        return embedding
 
     def put(self, signature: int, embedding: np.ndarray) -> None:
         self.misses += 1
-        self._store[signature] = embedding
+        self._store[signature] = (embedding, time.monotonic())
+        self._store.move_to_end(signature)
+        while self._max_entries and len(self._store) > self._max_entries:
+            self._store.popitem(last=False)  # evict least-recently-used
+            self.evictions += 1
+
+    @property
+    def size(self) -> int:
+        return len(self._store)
 
 
 def filter_persons(detections: List[dict], min_conf: float = 0.4) -> List[dict]:
@@ -299,14 +331,15 @@ class ModelManager:
         )
         persons = []
         for result in results:
-            if result.boxes is None:
+            if result.boxes is None or len(result.boxes) == 0:
                 continue
-            for box in result.boxes:
-                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
-                conf = float(box.conf[0].cpu().numpy())
+            # One GPU→CPU transfer for all boxes (was per-box .cpu() in a loop).
+            xyxy = result.boxes.xyxy.cpu().numpy().astype(int)
+            confs = result.boxes.conf.cpu().numpy()
+            for (x1, y1, x2, y2), conf in zip(xyxy, confs):
                 persons.append({
                     "bbox": {"x1": int(x1), "y1": int(y1), "x2": int(x2), "y2": int(y2)},
-                    "confidence": conf,
+                    "confidence": float(conf),
                 })
         return persons
 

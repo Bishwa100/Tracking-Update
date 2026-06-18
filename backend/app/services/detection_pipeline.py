@@ -16,11 +16,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.cv_pipeline import DetectedPerson
+from app.ml_models import ModelManager
 from app.models import DetectionEvent, Visitor
 from app.services import auto_enroller, identity_resolver
 from app.services.visit_tracker import VisitTracker
 from app.services.temporal_consistency import temporal_gate
-from app.services.mask_detector import is_masked as _is_masked, masked_threshold_offset
+from app.services.mask_detector import (
+    is_masked as _is_masked,
+    masked_threshold_offset,
+    extract_periocular_region,
+)
+from app.utils import normalize_embedding
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +64,27 @@ class ProcessedDetection:
         return ""
 
 
+def _better_resolution(
+    full: "identity_resolver.ResolutionResult",
+    perio: "identity_resolver.ResolutionResult",
+) -> "identity_resolver.ResolutionResult":
+    """
+    Pick the stronger of a masked face's full-face vs periocular resolution.
+    A confident returning ("face") match wins over a held/new one; if both (or
+    neither) are returning, the higher similarity wins. Ambiguous full-face
+    results are kept (don't let a periocular guess override a no-merge decision).
+    """
+    if full.is_ambiguous:
+        return full
+    full_face = full.match_source == "face"
+    perio_face = perio.match_source == "face"
+    if perio_face and not full_face:
+        return perio
+    if full_face and not perio_face:
+        return full
+    return perio if perio.face_similarity > full.face_similarity else full
+
+
 def _crop(frame: np.ndarray, bbox: Optional[dict]) -> Optional[np.ndarray]:
     if frame is None or not bbox:
         return None
@@ -87,13 +114,24 @@ async def process_detections(
     if not matchable:
         return []
 
-    # Mark masked detections and build face dicts for the resolver
+    # Mark masked detections and build face dicts for the resolver. For masked
+    # faces, also extract a periocular (eye-region) embedding — the lower face is
+    # occluded so the full-face embedding is unreliable; the eye region usually
+    # matches better.
     threshold_offsets: list[float] = []
+    periocular_embeddings: list[Optional[list]] = []
     for d in matchable:
         face_crop = _crop(frame, d.face_bbox or d.bbox)
+        perio_emb: Optional[list] = None
         if settings.MASK_DETECTION_ENABLED and face_crop is not None and _is_masked(face_crop):
             d.is_masked = True
+            perio_crop = extract_periocular_region(face_crop)
+            if perio_crop is not None:
+                fd = ModelManager.get_instance().extract_face_data(perio_crop)
+                if fd is not None and fd.get("embedding") is not None:
+                    perio_emb = normalize_embedding(fd["embedding"])
         threshold_offsets.append(masked_threshold_offset() if d.is_masked else 0.0)
+        periocular_embeddings.append(perio_emb)
 
     faces = [
         {
@@ -106,6 +144,24 @@ async def process_detections(
         for i, d in enumerate(matchable)
     ]
     resolutions = await identity_resolver.resolve_batch(faces, db)
+
+    # Resolve the periocular embeddings for masked faces and keep whichever of
+    # {full-face, periocular} gives the stronger result.
+    perio_idx = [i for i, e in enumerate(periocular_embeddings) if e is not None]
+    if perio_idx:
+        perio_faces = [
+            {
+                "face_embedding": periocular_embeddings[i],
+                "body_embedding": matchable[i].body_embedding,
+                "det_score": matchable[i].face_det_score or 0.0,
+                "pose_bin": "unknown",
+                "threshold_offset": threshold_offsets[i],
+            }
+            for i in perio_idx
+        ]
+        perio_res = await identity_resolver.resolve_batch(perio_faces, db)
+        for i, pres in zip(perio_idx, perio_res):
+            resolutions[i] = _better_resolution(resolutions[i], pres)
 
     out: List[ProcessedDetection] = []
     for det, res in zip(matchable, resolutions):
@@ -151,6 +207,20 @@ async def process_detections(
                 res.is_new = False
                 res.match_source = "temporal"
                 visitor = await db.get(Visitor, temporal_match)
+                # Learn the hard angle that caused the near-miss (the temporal
+                # gate, not the gallery, confirmed this is the same person).
+                if visitor is not None:
+                    await auto_enroller.update_after_match(
+                        db,
+                        visitor,
+                        face_embedding=det.face_embedding,
+                        det_score=det_score,
+                        face_similarity=res.face_similarity,
+                        body_embedding=det.body_embedding,
+                        face_crop=face_crop,
+                        pose=det.pose,
+                        match_source="temporal",
+                    )
             else:
                 visitor = await auto_enroller.register_new_visitor(
                     db,
@@ -186,7 +256,23 @@ async def process_detections(
                     pose=det.pose,
                 )
         else:
-            # Dropped (grey zone, low quality) — record nothing identity-bearing.
+            # Held — grey zone (or low quality). Not attributed to any visitor,
+            # but record an audit event so the grey-zone rate is measurable and
+            # the held detection is visible (it is NOT registered as a new
+            # visitor — that is the main multi-angle duplication fix).
+            if res.match_source == "grey_zone":
+                db.add(
+                    DetectionEvent(
+                        detected_at=timestamp,
+                        face_similarity=res.face_similarity or None,
+                        is_new_visitor=False,
+                        is_ambiguous=False,
+                        match_source="grey_zone",
+                        camera_id=camera_id,
+                        frame_path=frame_path,
+                        bbox=pd.bbox,
+                    )
+                )
             out.append(pd)
             continue
 
