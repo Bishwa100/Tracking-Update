@@ -5,14 +5,11 @@ import useSWR from "swr";
 import {
   CheckCircle2,
   CloudUpload,
-  Film,
   Loader2,
   Repeat,
   ScanFace,
   Square,
-  UserCheck,
   UserPlus,
-  Users,
   UsersRound,
 } from "lucide-react";
 
@@ -121,7 +118,7 @@ export default function VideoStudioPage() {
         <div className="space-y-6 lg:col-span-2">
           <DetectionFeed onStatus={setStatus} />
 
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <StatCard
               label="Registered"
               value={visitorList?.total ?? "—"}
@@ -135,25 +132,6 @@ export default function VideoStudioPage() {
               hint="this session"
               icon={<UserPlus className="h-5 w-5" />}
               tone="success"
-            />
-            <StatCard
-              label="Returning"
-              value={s?.returning_visitors ?? "—"}
-              hint="this session"
-              icon={<UserCheck className="h-5 w-5" />}
-              tone="warning"
-            />
-            <StatCard
-              label="Persons"
-              value={s?.persons_detected ?? "—"}
-              icon={<Users className="h-5 w-5" />}
-              tone="accent"
-            />
-            <StatCard
-              label="Frames"
-              value={s?.frames_processed ?? "—"}
-              icon={<Film className="h-5 w-5" />}
-              tone="primary"
             />
           </div>
         </div>
