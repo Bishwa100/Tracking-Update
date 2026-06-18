@@ -174,8 +174,13 @@ function DeviceCard() {
       <div className="flex flex-wrap gap-2">
         {DEVICE_OPTIONS.map((opt) => {
           const active = data.requested === opt.value;
-          const disabled =
-            (opt.needsGpu && !data.cuda_available) || switching !== null;
+          // Only block while a switch is in flight. The GPU option stays
+          // selectable even when CUDA isn't currently detected — the backend
+          // resolves the request safely (uses the GPU if one is present, else
+          // falls back to CPU with a warning), and the status below reflects
+          // what actually happened.
+          const disabled = switching !== null;
+          const noGpuHint = opt.needsGpu && !data.cuda_available;
           return (
             <Button
               key={opt.value}
@@ -186,6 +191,7 @@ function DeviceCard() {
             >
               {switching === opt.value && <Loader2 className="h-3 w-3 animate-spin" />}
               {opt.label}
+              {noGpuHint && <span className="text-xs text-text-muted">*</span>}
             </Button>
           );
         })}
