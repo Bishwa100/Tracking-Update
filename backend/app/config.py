@@ -166,7 +166,10 @@ class Settings(BaseSettings):
     INSIGHTFACE_DET_SIZE: int = 640
 
     # Body re-ID model: "osnet" (OSNet x0.25, 512-d, fast) or "none".
-    BODY_MODEL_TYPE: str = "osnet"
+    # Default "none": this deployment is face-only. OSNet is clothing-dependent
+    # (see ALLOW_BODY_FALLBACK) and only ever a same-session signal, so loading it
+    # for a full-face pipeline just costs memory/startup for no identity benefit.
+    BODY_MODEL_TYPE: str = "none"
     OSNET_WEIGHTS_PATH: str = "models/osnet_x0_25_msmt17.pth"
     OSNET_WEIGHTS_URL: str = (
         "https://huggingface.co/kaiyangzhou/osnet/resolve/main/"
