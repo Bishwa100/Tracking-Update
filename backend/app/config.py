@@ -272,6 +272,26 @@ class Settings(BaseSettings):
     # a known visitor is allowed to register a NEW visitor.
     TRACKLET_MIN_OBSERVATIONS_NEW: int = 2
 
+    # ── Registration pose gate (reduce duplicate registrations) ──
+    # A brand-new visitor is only CREATED from a roughly front-facing view.
+    # Profile / steep-angle first frames yield an embedding that later frontal
+    # views of the SAME person match weakly (below RETURNING_FACE_THRESHOLD), so
+    # they get registered again — the #1 cause of one person becoming several
+    # records. This gate applies ONLY to creating a new visitor; recognising and
+    # matching EXISTING visitors is never restricted by pose (you still want to
+    # re-identify a returning patron seen in profile).
+    #   "frontal"         — only a frontal face (|yaw| ≤ 15°, not steep-down) seeds
+    #                        a new visitor (recommended; safe default).
+    #   "frontal_or_down" — also allow downward-looking faces (menu / phone), but
+    #                        not hard left/right profiles.
+    #   "any"             — no pose gate (legacy behaviour).
+    REGISTRATION_POSE_POLICY: str = "frontal"
+    # Safety valve: if a tracklet is observed at least this many times but never
+    # presents a pose satisfying REGISTRATION_POSE_POLICY, register it anyway from
+    # the best available frame — so a person only ever seen in profile is not lost
+    # forever. 0 disables the valve (strict: never register a non-conforming pose).
+    REGISTRATION_POSE_FALLBACK_OBSERVATIONS: int = 5
+
     # ── Cross-camera identity (Phase 4) ──────────────────────
     # Master switch. Keep OFF until camera topology + review workflow are set up;
     # the camera-aware temporal gate and candidate check are inert when disabled.

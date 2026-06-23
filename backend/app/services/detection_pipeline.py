@@ -15,7 +15,7 @@ import numpy as np
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.cv_pipeline import DetectedPerson, _is_group_frame
+from app.cv_pipeline import DetectedPerson, FacePose, PoseBin, _is_group_frame
 from app.geometry import crop_from_frame
 from app.ml_models import ModelManager
 from app.models import DetectionEvent, Visitor
@@ -90,6 +90,30 @@ def _better_resolution(
 
 def _crop(frame: np.ndarray, bbox: Optional[dict]) -> Optional[np.ndarray]:
     return crop_from_frame(frame, bbox, min_size=4)
+
+
+def _pose_allows_registration(pose: Optional[FacePose]) -> bool:
+    """
+    Whether a face's head-pose is good enough to SEED a brand-new visitor.
+
+    Only gates CREATION of new visitors — matching/recognising existing visitors
+    is never restricted by pose. A non-frontal first embedding is the main cause
+    of one person being registered as several records, so we wait for a frontal
+    view (the tracklet observation safety-valve in process_detections registers a
+    profile-only person eventually so nobody is lost).
+    """
+    policy = settings.REGISTRATION_POSE_POLICY
+    if policy == "any":
+        return True
+    if pose is None:
+        # No landmarks → pose unknown; can't confirm it's frontal, so hold and
+        # wait for a frame we can judge (the safety-valve covers the rare case
+        # where a conforming pose never arrives).
+        return False
+    if policy == "frontal_or_down":
+        return pose.bin in (PoseBin.FRONTAL, PoseBin.DOWNWARD)
+    # default / "frontal"
+    return pose.bin == PoseBin.FRONTAL
 
 
 async def process_detections(
@@ -308,16 +332,30 @@ async def process_detections(
                 else:
                     allow_register = enough_obs          # grey-zone / crowded → persist first
 
+                # Pose gate: don't SEED a new visitor from a profile / steep-angle
+                # face — that weak first embedding is the main cause of one person
+                # becoming several records. A tracklet seen enough times without
+                # ever presenting a conforming pose registers anyway (safety valve)
+                # so a profile-only person isn't lost. Matching existing visitors
+                # above is never gated by pose.
+                held_source = res.match_source or "grey_zone"
+                if allow_register and not _pose_allows_registration(det.pose):
+                    obs = tracklet.observations if tracklet is not None else 0
+                    valve = settings.REGISTRATION_POSE_FALLBACK_OBSERVATIONS
+                    if not (valve > 0 and obs >= valve):
+                        allow_register = False
+                        held_source = "pose_hold"
+
                 if not allow_register:
-                    # HELD — record an audit event (measurable grey-zone rate)
-                    # and do not register; the next frames may confirm.
+                    # HELD — record an audit event (measurable hold rate) and do
+                    # not register; later frames may confirm or turn frontal.
                     db.add(
                         DetectionEvent(
                             detected_at=timestamp,
                             face_similarity=res.face_similarity or None,
                             is_new_visitor=False,
                             is_ambiguous=False,
-                            match_source=res.match_source or "grey_zone",
+                            match_source=held_source,
                             camera_id=camera_id,
                             frame_path=frame_path,
                             bbox=pd.bbox,
