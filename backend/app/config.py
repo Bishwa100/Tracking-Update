@@ -48,6 +48,19 @@ class Settings(BaseSettings):
     # visitor (top-2 rows can otherwise both belong to the same person, hiding
     # the real runner-up).
     IDENTITY_TOP_K: int = 10
+    # pgvector HNSW search breadth (the size of the dynamic candidate list). The
+    # default of 40 silently under-fetches once the gallery search also filters on
+    # is_active / consent_status / pose_bin INSIDE the LIMIT, so true matches can
+    # be missed → the same person re-registered as new. Set per resolve
+    # transaction via `SET LOCAL hnsw.ef_search`. Must be >= IDENTITY_TOP_K; 100 is
+    # a strong recall/latency trade-off for galleries up to ~1e6 rows. 0 leaves the
+    # server default (no SET issued).
+    #
+    # Note: pgvector's `<=>` distance for a returned row is already EXACT (we use
+    # L2-normalized embeddings, so `1 - cosine_distance` is the true cosine). HNSW
+    # is approximate only in WHICH rows it returns — so the right lever for recall
+    # is ef_search (this), not a NumPy re-rank of the rows it already returned.
+    HNSW_EF_SEARCH: int = 100
     # What to do with a "grey zone" face (REJECT_SIMILARITY < top_sim <
     # RETURNING_FACE_THRESHOLD): it is neither a confident match nor a confident
     # stranger, so creating a NEW visitor from it is the #1 cause of duplicate
@@ -200,6 +213,14 @@ class Settings(BaseSettings):
     # for a reliable embedding.
     MIN_FACE_SIZE_PX: int = 40
     MIN_FACE_DET_SCORE: float = 0.40
+    # When the single full-frame ArcFace pass assigns no face to a person box,
+    # retry face detection on that person's upscaled crop. This rescues small /
+    # partially-occluded faces the full-frame detector missed, but costs one extra
+    # ArcFace forward pass PER such person — the dominant per-frame cost in crowds.
+    # Set False to trust the full-frame pass only (faster; slightly lower face
+    # recall on small distant faces). The full-frame small-face rescue
+    # (refine_small_face) still runs regardless.
+    PER_PERSON_FACE_FALLBACK: bool = True
 
     # ── Upload limits (/api/detect) ──────────────────────────
     VIDEO_MAX_SIZE_MB: int = 100

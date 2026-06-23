@@ -68,6 +68,18 @@ async def _search_faces_batch(
         return [], {}
 
     top_k = max(2, int(settings.IDENTITY_TOP_K))
+
+    # Widen the HNSW dynamic candidate list for this transaction. pgvector's
+    # default ef_search (40) under-fetches once the LATERAL search also filters on
+    # is_active / consent_status / pose_bin inside the LIMIT, dropping true matches
+    # (→ same person re-registered as new). SET LOCAL scopes it to this tx only.
+    ef = int(settings.HNSW_EF_SEARCH)
+    if ef > 0:
+        ef = max(ef, top_k)
+        # ef_search is a non-negative integer GUC; inline (validated int, no user
+        # input) since SET LOCAL does not accept bind parameters.
+        await db.execute(text(f"SET LOCAL hnsw.ef_search = {ef}"))
+
     params: dict = {"top_k": top_k}
     for i, emb in enumerate(embeddings):
         params[f"emb_{i}"] = str(emb)

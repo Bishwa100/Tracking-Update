@@ -202,6 +202,14 @@ def process_frame(
     frame_faces = gated_faces
     face_secs = perf_counter() - _t_face
 
+    # Nothing to attribute identity to and no bodies to embed → skip the rest.
+    if not persons and not frame_faces:
+        logger.debug(
+            "process_frame timing: yolo=%.3fs arcface=%.3fs (0 person(s), 0 face(s)).",
+            yolo_secs, face_secs,
+        )
+        return detected_persons
+
     body_queue: List[tuple] = []  # (DetectedPerson, crop)
     h, w = image.shape[:2]
     used_faces: set = set()
@@ -235,7 +243,9 @@ def process_frame(
             used_faces.add(best_idx)
 
         # Fallback: no full-frame face landed here — retry on the upscaled crop.
-        if face_data is None:
+        # Costs one extra ArcFace pass per faceless person box (the dominant
+        # per-frame cost in crowds), so it's gated behind PER_PERSON_FACE_FALLBACK.
+        if face_data is None and settings.PER_PERSON_FACE_FALLBACK:
             _t_fb = perf_counter()
             face_data = model_mgr.extract_face_data(person_crop)
             face_secs += perf_counter() - _t_fb
