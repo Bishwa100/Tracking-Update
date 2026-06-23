@@ -47,7 +47,44 @@ small-face rescue (`refine_small_face`) is unaffected.
 `process_frame` now returns immediately when YOLO finds **no** persons *and* the
 ArcFace pass finds **no** faces, skipping the per-person and body-queue loops.
 
-### 1.4 Documented a non-fix (avoid dead complexity)
+### 1.4 Tracklet fast-path — skip the gallery search for known tracklets *(speed — biggest win)*
+**Problem.** Frame-to-frame, a person who is *still present* (e.g. seated) goes
+through the **entire** pipeline again every processed frame: YOLO → ArcFace → the
+**HNSW gallery search** in `identity_resolver` → `update_after_match` writes. The
+only short-circuit was whole-frame dedup, which fails the moment the person moves
+slightly. So a known, already-identified patron re-ran a full DB identity search
+on every frame for the duration of their visit.
+
+**Fix.** Once a tracklet is confirmed by a **confident face match**, its
+`visitor_id`, the verifying face embedding, and the verify time are pinned
+(`tracklet.mark_resolved(..., verified_embedding=...)`). On later frames,
+`process_detections` associates each detection with its tracklet *before*
+resolving and, when the pin is still trustworthy, attributes **directly** to the
+pinned visitor with **no gallery search and no gallery growth** — just the
+visit-tracker heartbeat + an audit event (`match_source="tracklet_fast"`, so the
+fast-path rate is measurable in `detection_events`).
+
+**Drift guard (why identity can't silently swap).** `tracklet.needs_reverify()`
+forces a full re-resolve whenever *any* of these fire:
+- `TRACKLET_REVERIFY_SECONDS` elapsed since the last verification (default 2 s,
+  conservative — bounds any mis-attribution to a ~2 s window),
+- the body box's IoU with the tracklet's last box drops below
+  `TRACKLET_REVERIFY_IOU` (default 0.7 → a possible tracking swap in a crowd),
+- the incoming face drifts from the verified one (cosine below
+  `RETURNING_FACE_THRESHOLD`).
+Masked faces always take the full path (they need the periocular re-resolve), and
+weak pins (body / temporal / cross-camera / fresh registration) deliberately do
+**not** enable the fast-path — only a confident face does.
+
+- Knob: `TRACKLET_FAST_PATH` (bool, default **False** — opt-in; behaviour
+  unchanged until enabled), `TRACKLET_REVERIFY_SECONDS` (2.0, conservative),
+  `TRACKLET_REVERIFY_IOU` (0.7, conservative).
+- Effect: for a stationary patron, frames 2..N between re-verifies cost ~one IoU
+  compare + a heartbeat instead of a full ArcFace-gallery resolve. The DB
+  identity-search load over a busy seated room drops roughly in proportion to
+  `TRACKLET_REVERIFY_SECONDS × processed-FPS`.
+
+### 1.5 Documented a non-fix (avoid dead complexity)
 A NumPy "exact re-rank" of HNSW results was considered and **rejected**: pgvector's
 `1 - (embedding <=> query)` is already the *exact* cosine for our L2-normalized
 embeddings, and the outer `ORDER BY similarity DESC` already sorts returned rows

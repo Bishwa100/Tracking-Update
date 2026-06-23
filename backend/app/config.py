@@ -293,6 +293,37 @@ class Settings(BaseSettings):
     # a known visitor is allowed to register a NEW visitor.
     TRACKLET_MIN_OBSERVATIONS_NEW: int = 2
 
+    # ── Tracklet fast-path (skip gallery search for known tracklets) ──
+    # Once a tracklet is confidently resolved to a visitor, later frames of that
+    # SAME tracklet (same camera, overlapping body) skip the expensive HNSW gallery
+    # search and attribute directly to the pinned visitor. This is the big CPU win
+    # for stationary/seated patrons: frame 2..N of a known person become a cheap
+    # IoU association + visit-tracker heartbeat instead of a full re-resolve.
+    #
+    # OFF by default so behaviour is unchanged until you opt in. Identity can't
+    # silently drift because the pin is RE-VERIFIED (a full gallery search is
+    # forced) whenever any of these fire:
+    #   • more than TRACKLET_REVERIFY_SECONDS elapsed since the last verification,
+    #   • the body bbox moved enough that IoU with the last box drops below
+    #     TRACKLET_REVERIFY_IOU (a possible tracking swap in a crowd),
+    #   • the aligned face crop changed materially (the per-stream face-embedding
+    #     cache missed → not the same stable face we verified).
+    TRACKLET_FAST_PATH: bool = False
+    # Re-verify a pinned tracklet at least this often (seconds). Lower = safer
+    # (more frequent full resolves), higher = faster. 0 disables the time trigger
+    # (only the IoU / face-change triggers force a re-verify — most aggressive).
+    # Default 2.0 is conservative: it keeps the per-visit speed win but bounds any
+    # mis-attribution to a ~2 s window, so the fast-path stays close to the
+    # every-frame slow path on accuracy. Raise toward 5–10 s for sparse/seated
+    # scenes where more throughput is worth a slightly wider window.
+    TRACKLET_REVERIFY_SECONDS: float = 2.0
+    # Force a re-verify when the current body box's IoU with the tracklet's last
+    # box falls below this — i.e. the person moved/swapped enough that the cheap
+    # association is no longer trustworthy. 1.0 would re-verify every frame. 0.7 is
+    # conservative (a fairly stationary body); lower it toward 0.5 to fast-path
+    # through more movement at a slightly higher swap risk in crowds.
+    TRACKLET_REVERIFY_IOU: float = 0.7
+
     # ── Registration pose gate (reduce duplicate registrations) ──
     # A brand-new visitor is only CREATED from a roughly front-facing view.
     # Profile / steep-angle first frames yield an embedding that later frontal

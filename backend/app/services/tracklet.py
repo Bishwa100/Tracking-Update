@@ -17,7 +17,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from app.config import settings
-from app.geometry import bbox_center
+from app.geometry import bbox_center, bbox_iou
 
 
 @dataclass
@@ -28,6 +28,15 @@ class Tracklet:
     created_ts: datetime
     observations: int = 1
     visitor_id: Optional[UUID] = None  # set once the tracklet resolves to a visitor
+    # When the pin was last confirmed by a full gallery search. Used by the
+    # fast-path: a pinned tracklet may attribute directly to its visitor until a
+    # re-verify is due (time elapsed / IoU drop / face change), then it must
+    # re-resolve. None until first resolved.
+    last_verified_ts: Optional[datetime] = None
+    # Face embedding from the last full resolve that confirmed the pin. The
+    # fast-path compares the incoming face against this: if it drifts too far the
+    # tracklet may have swapped to a different nearby person, so force a re-verify.
+    last_verified_embedding: Optional[List[float]] = None
 
 
 def _center_distance(a: dict, b: dict) -> float:
@@ -85,15 +94,83 @@ class TrackletBuffer:
         self._tracklets.append(tr)
         return tr
 
-    def mark_resolved(self, tracklet: Tracklet, visitor_id: UUID) -> None:
-        """Pin a tracklet to a visitor so later frames attach instead of re-resolving."""
+    def mark_resolved(
+        self,
+        tracklet: Tracklet,
+        visitor_id: UUID,
+        verified_ts: Optional[datetime] = None,
+        verified_embedding: Optional[List[float]] = None,
+    ) -> None:
+        """Pin a tracklet to a visitor so later frames attach instead of re-resolving.
+
+        `verified_ts` records when this pin was confirmed by a full gallery search;
+        `verified_embedding` is the face that confirmed it. The fast-path uses both
+        to decide when a re-verify is due.
+
+        Only a CONFIDENT FACE match passes `verified_embedding` — that's the only
+        signal strong enough to license skipping the gallery search next frame.
+        Weaker pins (body / temporal / cross-camera / tracklet-attach) set the
+        visitor but deliberately leave verification state untouched, so the next
+        frame still does a full resolve rather than fast-pathing off a weak match.
+        """
         tracklet.visitor_id = visitor_id
+        if verified_embedding is not None:
+            tracklet.last_verified_ts = verified_ts or tracklet.last_ts
+            tracklet.last_verified_embedding = verified_embedding
+
+    def needs_reverify(
+        self,
+        tracklet: Tracklet,
+        bbox: dict,
+        now: datetime,
+        embedding: Optional[List[float]] = None,
+    ) -> bool:
+        """
+        Whether a pinned tracklet must be re-resolved by a full gallery search
+        rather than fast-attributed to its pinned visitor.
+
+        Returns True (force a full resolve) when the fast-path is unsafe:
+          • the tracklet isn't pinned yet, or was never verified,
+          • more than TRACKLET_REVERIFY_SECONDS elapsed since the last verify,
+          • the body box moved enough that IoU with the last box dropped below
+            TRACKLET_REVERIFY_IOU (possible tracking swap),
+          • the incoming face drifted from the one that last confirmed the pin
+            (cosine below the verified bar) — the tracklet may have swapped to a
+            different nearby person.
+        Returns False only when all guards pass → safe to skip the gallery search.
+        """
+        if tracklet.visitor_id is None or tracklet.last_verified_ts is None:
+            return True
+
+        reverify_secs = settings.TRACKLET_REVERIFY_SECONDS
+        if reverify_secs > 0:
+            if (now - tracklet.last_verified_ts) >= timedelta(seconds=reverify_secs):
+                return True
+
+        if bbox_iou(bbox, tracklet.last_bbox) < settings.TRACKLET_REVERIFY_IOU:
+            return True
+
+        # If the incoming face has drifted from the one that confirmed the pin, the
+        # cheap association may have jumped to a different person — re-resolve. The
+        # bar is deliberately high (near-identical face) since within a few seconds
+        # the same person's face is very stable; anything looser is a swap risk.
+        if embedding is not None and tracklet.last_verified_embedding is not None:
+            from app.similarity import cosine_similarity
+
+            sim = cosine_similarity(
+                embedding, tracklet.last_verified_embedding, assume_normalized=True
+            )
+            if sim < settings.RETURNING_FACE_THRESHOLD:
+                return True
+
+        return False
 
     def clear_visitor(self, visitor_id: UUID) -> None:
         """Drop a visitor's pin (e.g. after a merge or opt-out)."""
         for t in self._tracklets:
             if t.visitor_id == visitor_id:
                 t.visitor_id = None
+                t.last_verified_ts = None
 
 
 # Module-level singleton shared within the process.

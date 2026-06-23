@@ -155,18 +155,62 @@ async def process_detections(
         threshold_offsets.append(masked_threshold_offset() if d.is_masked else 0.0)
         periocular_embeddings.append(perio_emb)
 
+    # ── Tracklet fast-path ──────────────────────────────────────────────
+    # Associate each detection with its per-camera tracklet up front. A tracklet
+    # already pinned to a visitor (and not due for re-verify) is attributed
+    # DIRECTLY to that visitor without the expensive HNSW gallery search — the big
+    # CPU win for stationary/seated patrons on frame 2..N. Everything else still
+    # goes through resolve_batch below. The tracklet for each detection is reused
+    # later in the loop (so we associate exactly once per detection).
+    tracklets: list = [None] * len(matchable)
+    fast_visitor: list = [None] * len(matchable)
+    if settings.TRACKLET_ENABLED and camera_id is not None:
+        for i, d in enumerate(matchable):
+            tr = tracklet_buffer.get_or_create(
+                camera_id, d.face_bbox or d.bbox, timestamp
+            )
+            tracklets[i] = tr
+            # Masked faces always take the full path: their full-face embedding is
+            # unreliable and they get a periocular re-resolve below, so we must not
+            # short-circuit them.
+            if (
+                settings.TRACKLET_FAST_PATH
+                and not d.is_masked
+                and not tracklet_buffer.needs_reverify(
+                    tr, d.face_bbox or d.bbox, timestamp, d.face_embedding
+                )
+            ):
+                fast_visitor[i] = tr.visitor_id
+
+    # Only faces WITHOUT a trusted fast-path pin need the gallery search.
+    resolve_idx = [i for i in range(len(matchable)) if fast_visitor[i] is None]
     faces = [
         {
-            "face_embedding": d.face_embedding,
-            "body_embedding": d.body_embedding,
-            "det_score": d.face_det_score or 0.0,
-            "pose_bin": d.pose.bin.value if d.pose else "unknown",
-            "yaw": d.pose.yaw if d.pose else None,
+            "face_embedding": matchable[i].face_embedding,
+            "body_embedding": matchable[i].body_embedding,
+            "det_score": matchable[i].face_det_score or 0.0,
+            "pose_bin": matchable[i].pose.bin.value if matchable[i].pose else "unknown",
+            "yaw": matchable[i].pose.yaw if matchable[i].pose else None,
             "threshold_offset": threshold_offsets[i],
         }
-        for i, d in enumerate(matchable)
+        for i in resolve_idx
     ]
-    resolutions = await identity_resolver.resolve_batch(faces, db)
+    resolved = await identity_resolver.resolve_batch(faces, db) if faces else []
+
+    # Re-expand to one resolution per matchable detection, in order. Fast-path
+    # detections get a synthetic confident result attributed to the pinned visitor.
+    resolutions: list = [None] * len(matchable)
+    for j, i in enumerate(resolve_idx):
+        resolutions[i] = resolved[j]
+    for i in range(len(matchable)):
+        if fast_visitor[i] is not None:
+            resolutions[i] = identity_resolver.ResolutionResult(
+                visitor_id=fast_visitor[i],
+                is_new=False,
+                face_similarity=0.0,
+                match_source="tracklet_fast",
+                top_match_id=fast_visitor[i],
+            )
 
     # Resolve the periocular embeddings for masked faces and keep whichever of
     # {full-face, periocular} gives the stronger result.
@@ -187,7 +231,7 @@ async def process_detections(
             resolutions[i] = _better_resolution(resolutions[i], pres)
 
     out: List[ProcessedDetection] = []
-    for det, res in zip(matchable, resolutions):
+    for i, (det, res) in enumerate(zip(matchable, resolutions)):
         det_score = det.face_det_score or 0.0
         face_crop = _crop(frame, det.face_bbox or det.bbox)
 
@@ -215,15 +259,18 @@ async def process_detections(
             out.append(pd)
             continue
 
-        # Associate this detection with a per-camera tracklet (same body across
-        # frames) so we can defer NEW creation and attach later frames.
-        tracklet = None
-        if settings.TRACKLET_ENABLED and camera_id is not None:
-            tracklet = tracklet_buffer.get_or_create(
-                camera_id, det.face_bbox or det.bbox, timestamp
-            )
+        # Reuse the tracklet associated up front (the fast-path block already
+        # called get_or_create once per detection — don't double-count observations).
+        tracklet = tracklets[i]
 
-        if res.match_source == "face" and res.visitor_id is not None:
+        if res.match_source == "tracklet_fast" and res.visitor_id is not None:
+            # Fast-path: a pinned, not-yet-due-for-reverify tracklet. Attribute
+            # directly to the visitor WITHOUT the gallery search or gallery growth
+            # (we didn't search, and the verified frame already grew it). Still
+            # heartbeats the visit + writes an audit event below.
+            pd.visitor_id = res.visitor_id
+
+        elif res.match_source == "face" and res.visitor_id is not None:
             # Confident returning match — attribute + grow gallery/centroid.
             pd.visitor_id = res.visitor_id
             visitor = await db.get(Visitor, res.visitor_id)
@@ -236,7 +283,11 @@ async def process_detections(
                     pose=det.pose, camera_id=camera_id,
                 )
             if tracklet is not None:
-                tracklet_buffer.mark_resolved(tracklet, res.visitor_id)
+                # Record this as the verified pin so later frames can fast-path.
+                tracklet_buffer.mark_resolved(
+                    tracklet, res.visitor_id,
+                    verified_ts=timestamp, verified_embedding=det.face_embedding,
+                )
 
         elif res.match_source == "body" and res.visitor_id is not None:
             # Same-session body fallback — attribute only (clothing-dependent).
