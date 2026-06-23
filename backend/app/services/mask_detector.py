@@ -48,12 +48,16 @@ def is_masked(face_crop: np.ndarray) -> bool:
     upper_std = _upper_face_uniformity(face_crop)
     lower_bright = _lower_face_brightness(face_crop)
 
-    # Mask signals: lower region is flat (low std) and brighter or uniform
+    # A mask makes the lower face FLAT (low texture) while the eye region keeps
+    # normal texture (real eyes). But a flat lower face alone is not enough — a
+    # clean-shaven chin or a plain shirt in shadow is also flat and would falsely
+    # loosen the match threshold. A real surgical/cloth mask is also a distinctly
+    # NON-skin tone: clearly bright (white surgical) or clearly dark (black cloth),
+    # not a mid-tone like skin. Require all three so we don't mask-flag bare faces.
     lower_is_flat = lower_std < 18.0
     upper_has_texture = upper_std > 12.0
-    # Dark masks (black cloth) have low brightness; bright masks (white surgical)
-    # have high brightness — both are flat
-    return lower_is_flat and upper_has_texture
+    non_skin_tone = lower_bright > 170.0 or lower_bright < 70.0
+    return lower_is_flat and upper_has_texture and non_skin_tone
 
 
 def _lower_std(face_crop: np.ndarray) -> float:

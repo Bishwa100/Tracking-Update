@@ -365,6 +365,26 @@ class ModelManager:
             return None
         return max(faces, key=lambda f: f["det_score"])
 
+    def _embed_aligned(self, rec_model, aligned: np.ndarray) -> np.ndarray:
+        """
+        Compute a normalized ArcFace embedding from a 112×112 aligned face crop,
+        applying the configured lighting normalization (gamma + CLAHE) FIRST.
+
+        Single source of truth so the cached and standard paths embed identically —
+        enrollment and query embeddings must come from the same preprocessing or
+        their cosine similarity is meaningless. Preprocessing runs on the ALIGNED
+        crop (after landmark alignment, which is unaffected by intensity changes),
+        so both paths normalize the exact same canonical face.
+        """
+        from app.utils import preprocess_face_for_recognition
+
+        prepped = preprocess_face_for_recognition(aligned)
+        embedding = np.asarray(rec_model.get_feat(prepped)).flatten()
+        norm = np.linalg.norm(embedding)
+        if norm > 0:
+            embedding = embedding / norm
+        return embedding
+
     def extract_all_faces(
         self,
         image: np.ndarray,
@@ -373,6 +393,11 @@ class ModelManager:
         """
         Detect EVERY face in an image in a single ArcFace pass.
         Returns [{embedding, bbox, det_score}] in frame coordinates.
+
+        Both the cached and standard paths align each face then embed it through
+        `_embed_aligned`, so the configured lighting normalization is applied
+        consistently (a raw `face_app.get()` would skip it and produce embeddings
+        that don't match the preprocessed gallery).
         """
         if embedding_cache is not None:
             try:
@@ -382,17 +407,47 @@ class ModelManager:
                     "Cached face extraction failed (%s) — using standard pass.", exc
                 )
 
-        faces = self.face_app.get(image)
+        return self._extract_all_faces_uncached(image)
+
+    def _extract_all_faces_uncached(self, image: np.ndarray) -> List[dict]:
+        """Detection + aligned recognition with preprocessing, no embedding cache."""
+        from insightface.utils import face_align
+
+        det_model = getattr(self.face_app, "det_model", None)
+        rec_model = (self.face_app.models or {}).get("recognition")
+        if det_model is None or rec_model is None:
+            # Models unavailable for the manual path — fall back to the built-in
+            # pipeline (no preprocessing, but still returns embeddings).
+            faces = self.face_app.get(image)
+            return [
+                {
+                    "embedding": f.normed_embedding,
+                    "bbox": {
+                        "x1": int(f.bbox[0]), "y1": int(f.bbox[1]),
+                        "x2": int(f.bbox[2]), "y2": int(f.bbox[3]),
+                    },
+                    "det_score": float(f.det_score),
+                    "kps": np.asarray(f.kps) if getattr(f, "kps", None) is not None else None,
+                }
+                for f in faces
+            ]
+
+        bboxes, kpss = det_model.detect(image, max_num=0, metric="default")
+        if bboxes is None or len(bboxes) == 0 or kpss is None:
+            return []
+
+        input_size = getattr(rec_model, "input_size", None) or (112, 112)
         results: List[dict] = []
-        for face in faces:
-            x1, y1, x2, y2 = face.bbox.astype(int)
-            kps = getattr(face, "kps", None)
+        for i in range(bboxes.shape[0]):
+            x1, y1, x2, y2 = bboxes[i, 0:4].astype(int)
+            aligned = face_align.norm_crop(
+                image, landmark=kpss[i], image_size=input_size[0]
+            )
             results.append({
-                "embedding": face.normed_embedding,
+                "embedding": self._embed_aligned(rec_model, aligned),
                 "bbox": {"x1": int(x1), "y1": int(y1), "x2": int(x2), "y2": int(y2)},
-                "det_score": float(face.det_score),
-                # 5-point landmarks — needed downstream for head-pose estimation.
-                "kps": np.asarray(kps) if kps is not None else None,
+                "det_score": float(bboxes[i, 4]),
+                "kps": np.asarray(kpss[i]),
             })
         return results
 
@@ -423,13 +478,13 @@ class ModelManager:
             aligned = face_align.norm_crop(
                 image, landmark=kpss[i], image_size=input_size[0]
             )
+            # Hash the RAW aligned crop so the cache key is stable across runs;
+            # preprocessing inside _embed_aligned is deterministic, so the same key
+            # always maps to the same preprocessed embedding.
             sig = compute_dhash(aligned, hash_size=8)
             embedding = embedding_cache.get(sig)
             if embedding is None:
-                embedding = np.asarray(rec_model.get_feat(aligned)).flatten()
-                norm = np.linalg.norm(embedding)
-                if norm > 0:
-                    embedding = embedding / norm
+                embedding = self._embed_aligned(rec_model, aligned)
                 embedding_cache.put(sig, embedding)
             results.append({
                 "embedding": embedding,

@@ -92,7 +92,10 @@ def estimate_pose(face_landmarks: Optional[np.ndarray]) -> FacePose:
     else:
         bin_ = PoseBin.RIGHT_PROFILE
 
-    if pitch > 20 and bin_ == PoseBin.FRONTAL:
+    # A steeply downward head (reading a phone / menu) reads as DOWNWARD even when
+    # also slightly turned — only a hard left/right profile (|yaw| > 45°) keeps its
+    # profile bin, since at that angle the downward cue is unreliable.
+    if pitch > 20 and abs(yaw) <= 45:
         bin_ = PoseBin.DOWNWARD
 
     return FacePose(yaw=yaw, pitch=pitch, roll=roll, bin=bin_)
