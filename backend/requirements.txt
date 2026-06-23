@@ -23,6 +23,10 @@ onnx>=1.16.0
 opencv-python-headless>=4.9.0
 numpy>=1.26.0
 Pillow>=10.0
+# Bundles a modern FFmpeg (7.x) used by the native RTSP client to decode H.264
+# for cameras that require SHA-256 digest auth (OpenCV's FFmpeg can't). See
+# app/services/rtsp_native.py.
+imageio-ffmpeg>=0.5.1
 
 # ── HTTP client ───────────────────────────────────────────
 httpx>=0.24.0

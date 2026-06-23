@@ -127,6 +127,17 @@ class CameraService:
 
         cap_source = _parse_source(self.source)
         self.capture = await asyncio.to_thread(cv2.VideoCapture, cap_source)
+        if not self.capture.isOpened() and str(self.source).startswith("rtsp"):
+            # OpenCV's FFmpeg can't do SHA-256 RTSP digest (common on modern IP
+            # cameras). Fall back to our native RTSP client, which authenticates
+            # itself and decodes via FFmpeg. See services/rtsp_native.py.
+            try:
+                await asyncio.to_thread(self.capture.release)
+            except Exception:  # noqa: BLE001
+                pass
+            logger.info("OpenCV could not open RTSP source; trying native RTSP client.")
+            from app.services.rtsp_native import RtspNativeCapture
+            self.capture = await asyncio.to_thread(RtspNativeCapture, self.source)
         if not self.capture.isOpened():
             self.capture = None
             raise RuntimeError(f"Could not open camera source: {self.source}")
