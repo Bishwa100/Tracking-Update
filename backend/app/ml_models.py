@@ -86,12 +86,42 @@ def filter_persons(detections: List[dict], min_conf: float = 0.4) -> List[dict]:
     ]
 
 
-def cuda_available() -> bool:
-    """True when a usable CUDA GPU is visible to torch (CUDA torch build present)."""
+def _probe_cuda_present() -> bool:
+    """One-shot hardware probe for a usable CUDA GPU. Must run before anything can
+    pollute CUDA_VISIBLE_DEVICES (see cuda_available for why)."""
     try:
         return bool(torch.cuda.is_available() and torch.cuda.device_count() > 0)
     except Exception:
         return False
+
+
+# Snapshot GPU presence ONCE at import — deliberately not re-queried live.
+# Ultralytics calls select_device('cpu') whenever YOLO runs on CPU (including the
+# startup warmup), which sets CUDA_VISIBLE_DEVICES='' for the rest of the process.
+# After that, torch.cuda.device_count() returns 0, so a live check would wrongly
+# report "no GPU" and turn every CPU→GPU switch into a silent no-op. This snapshot
+# is taken before any model (and any CPU YOLO predict) loads, so it reflects the
+# real hardware and still honours a CUDA_VISIBLE_DEVICES the operator set *before*
+# launch (a deliberate CPU-only run snapshots False and is left alone).
+_CUDA_PRESENT: bool = _probe_cuda_present()
+
+
+def cuda_available() -> bool:
+    """True when a real CUDA GPU was visible to torch at process start."""
+    return _CUDA_PRESENT
+
+
+def _ensure_gpu_visible() -> None:
+    """Undo a GPU-hiding CUDA_VISIBLE_DEVICES so a (re)load onto CUDA can actually
+    see the GPU. Ultralytics sets it to '' (torch treats '-1' the same) when YOLO
+    runs on CPU; left in place it hides the GPU from BOTH torch and the onnxruntime
+    CUDA provider for the rest of the process — which is exactly what breaks a live
+    CPU→GPU switch. Only the hiding values are cleared; a deliberate '0'/'1'
+    selection is left untouched."""
+    cvd = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if cvd is not None and cvd.strip() in ("", "-1"):
+        del os.environ["CUDA_VISIBLE_DEVICES"]
+        logger.info("Cleared GPU-hiding CUDA_VISIBLE_DEVICES=%r to re-enable CUDA.", cvd)
 
 
 def gpu_info() -> dict:
@@ -163,6 +193,11 @@ class ModelManager:
             return
 
         self.device = resolve_device(device)
+        if self.device == "cuda":
+            # A prior CPU run may have left CUDA_VISIBLE_DEVICES='' (Ultralytics),
+            # which would hide the GPU from torch and onnxruntime even now. Clear it
+            # before loading any model so the CUDA providers actually bind to the GPU.
+            _ensure_gpu_visible()
         logger.info("Loading models on device: %s", self.device)
         self._load_yolo(yolo_path)
         self._load_arcface(insightface_name)
