@@ -51,6 +51,9 @@ _PATCHABLE = {
     "YOLO_PERSON_CONFIDENCE",
     "MIN_FACE_DET_SCORE",
     "FACE_QUALITY_CUTOFF",
+    # Max face embeddings kept per visitor. Higher = more multi-pose data per
+    # person (better recall) + larger gallery; merges only trim faces ABOVE this.
+    "MAX_FACES_PER_VISITOR",
     # ── Multi-angle identity (Phase 3) ──
     "POSE_CONTINUOUS_SEARCH",
     "ADAPTIVE_VISITOR_THRESHOLDS",
