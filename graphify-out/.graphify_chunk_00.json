@@ -1,0 +1,1011 @@
+{
+  "nodes": [
+    {
+      "id": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN_MD",
+      "label": "Advanced Optimization & Deduplication Plan (Multi-Angle Focus)",
+      "file_type": "document",
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": "2026-06-18",
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "IMPROVEMENT_PLAN_MD",
+      "label": "Accuracy & Performance Improvement Plan",
+      "file_type": "document",
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": "2026-06-23",
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "BACKEND_REQUIREMENTS_TXT",
+      "label": "Backend Python Requirements",
+      "file_type": "code",
+      "source_file": "backend/requirements.txt",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "ADVANCED_OPTIMIZATION_cross_camera_body_reid_fusion",
+      "label": "Cross-Camera Body Re-ID Fusion (Session Linking)",
+      "file_type": "rationale",
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 2A",
+      "source_url": null,
+      "captured_at": "2026-06-18",
+      "author": null,
+      "contributor": null,
+      "rationale": "OSNet body embeddings (>0.85 similarity) bridge frontal-vs-profile face failures across cameras within an overlapping time window; merge face galleries on match."
+    },
+    {
+      "id": "ADVANCED_OPTIMIZATION_tracklet_based_identity_resolution",
+      "label": "Tracklet-Based Identity Resolution",
+      "file_type": "rationale",
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 2B",
+      "source_url": null,
+      "captured_at": "2026-06-18",
+      "author": null,
+      "contributor": null,
+      "rationale": "Track persons across a few seconds via ByteTrack/DeepSORT, collect multiple face angles, then send the best face to the DB to avoid premature NEW VISITOR registration on first blurry frame."
+    },
+    {
+      "id": "ADVANCED_OPTIMIZATION_dynamic_pose_adaptive_thresholds",
+      "label": "Dynamic Pose-Adaptive Thresholds",
+      "file_type": "rationale",
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 2C",
+      "source_url": null,
+      "captured_at": "2026-06-18",
+      "author": null,
+      "contributor": null,
+      "rationale": "Lower RETURNING_FACE_THRESHOLD (0.55 to 0.48) when pose_bin mismatch is observed, gated by high body embedding similarity."
+    },
+    {
+      "id": "ADVANCED_OPTIMIZATION_global_topology_aware_temporal_gate",
+      "label": "Global (Topology-Aware) Temporal Gate",
+      "file_type": "rationale",
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 2D",
+      "source_url": null,
+      "captured_at": "2026-06-18",
+      "author": null,
+      "contributor": null,
+      "rationale": "Replace naive 150px spatial check with cross-camera logical gate; a visitor disappearing from Camera 1 and appearing in Camera 2 seconds later with matching body embedding is assumed to be the same person."
+    },
+    {
+      "id": "ADVANCED_OPTIMIZATION_offline_nightly_dedup",
+      "label": "Offline / Nightly Global Deduplication",
+      "file_type": "rationale",
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 3A",
+      "source_url": null,
+      "captured_at": "2026-06-18",
+      "author": null,
+      "contributor": null,
+      "rationale": "Run DBSCAN nightly over that day's visitors using weighted Face (0.6) + Body (0.4) + Time Overlap scores to propose high-confidence merges."
+    },
+    {
+      "id": "ADVANCED_OPTIMIZATION_cross_stream_batching",
+      "label": "Cross-Stream Batching",
+      "file_type": "rationale",
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 3B",
+      "source_url": null,
+      "captured_at": "2026-06-18",
+      "author": null,
+      "contributor": null,
+      "rationale": "Introduce a global batching queue so YOLO/OSNet batch crops from multiple cameras into a single tensor (batch size 16) for GPU utilization."
+    },
+    {
+      "id": "ADVANCED_OPTIMIZATION_feature_extractor_upgrades",
+      "label": "Upgrade Feature Extractors (Future-Proofing)",
+      "file_type": "rationale",
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 3C",
+      "source_url": null,
+      "captured_at": "2026-06-18",
+      "author": null,
+      "contributor": null,
+      "rationale": "Evaluate upgrading OSNet to StrongSORT/BoT-SORT for occlusion robustness and switching ArcFace to AdaFace for pose-invariant face recognition."
+    },
+    {
+      "id": "IMPROVEMENT_hnsw_ef_search_tuning",
+      "label": "HNSW ef_search Tuning",
+      "file_type": "rationale",
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 1.1",
+      "source_url": null,
+      "captured_at": "2026-06-23",
+      "author": null,
+      "contributor": null,
+      "rationale": "Set hnsw.ef_search=100 (via SET LOCAL) per resolve transaction to prevent filtered queries from exhausting graph candidates and re-registering returning visitors as new."
+    },
+    {
+      "id": "IMPROVEMENT_per_person_arcface_fallback_gating",
+      "label": "Per-person ArcFace Fallback Gating",
+      "file_type": "rationale",
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 1.2",
+      "source_url": null,
+      "captured_at": "2026-06-23",
+      "author": null,
+      "contributor": null,
+      "rationale": "Gate the second per-person ArcFace pass behind PER_PERSON_FACE_FALLBACK so deployments with strong full-frame face detection can avoid N extra ArcFace forward passes per crowded frame."
+    },
+    {
+      "id": "IMPROVEMENT_empty_frame_early_out",
+      "label": "Empty-Frame Early-Out",
+      "file_type": "rationale",
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 1.3",
+      "source_url": null,
+      "captured_at": "2026-06-23",
+      "author": null,
+      "contributor": null,
+      "rationale": "Skip per-person and body-queue loops when YOLO finds no persons AND ArcFace finds no faces."
+    },
+    {
+      "id": "IMPROVEMENT_tracklet_fast_path",
+      "label": "Tracklet Fast-Path",
+      "file_type": "rationale",
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 1.4",
+      "source_url": null,
+      "captured_at": "2026-06-23",
+      "author": null,
+      "contributor": null,
+      "rationale": "Pin visitor_id and verified_embedding on a confident tracklet match; attribute later frames directly without gallery search. Drift guard re-verifies on time, IoU, or face drift."
+    },
+    {
+      "id": "IMPROVEMENT_consolidate_per_match_db_round_trips",
+      "label": "Consolidate Per-Match DB Round-Trips",
+      "file_type": "rationale",
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 2.1",
+      "source_url": null,
+      "captured_at": "2026-06-23",
+      "author": null,
+      "contributor": null,
+      "rationale": "Fetch visitor gallery (embedding, det_score, pose_bin, body_embedding) once per match instead of three sequential SELECTs in auto_enroller.update_after_match."
+    },
+    {
+      "id": "IMPROVEMENT_masked_face_periocular_batching",
+      "label": "Masked-Face Periocular Batching",
+      "file_type": "rationale",
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 2.2",
+      "source_url": null,
+      "captured_at": "2026-06-23",
+      "author": null,
+      "contributor": null,
+      "rationale": "Batch periocular ArcFace embeds across masked faces in the frame and short-circuit mask detection when MASK_DETECTION_ENABLED is off."
+    },
+    {
+      "id": "IMPROVEMENT_persist_ef_search_at_role_level",
+      "label": "Persist ef_search at Index/Role Level",
+      "file_type": "rationale",
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 2.3",
+      "source_url": null,
+      "captured_at": "2026-06-23",
+      "author": null,
+      "contributor": null,
+      "rationale": "Belt-and-suspenders ALTER DATABASE ... SET hnsw.ef_search=100 so future queries missing SET LOCAL still benefit."
+    },
+    {
+      "id": "IMPROVEMENT_fused_score_reranking",
+      "label": "Fused-Score Re-Ranking of Candidates",
+      "file_type": "rationale",
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 2.4",
+      "source_url": null,
+      "captured_at": "2026-06-23",
+      "author": null,
+      "contributor": null,
+      "rationale": "Compute w_f*face_sim + w_b*body_sim fused score for same-session grey-zone candidates before the ambiguity gate (not across visits)."
+    },
+    {
+      "id": "IMPROVEMENT_detector_input_size_auto_selection",
+      "label": "Detector Input-Size Auto-Selection",
+      "file_type": "rationale",
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 2.5",
+      "source_url": null,
+      "captured_at": "2026-06-23",
+      "author": null,
+      "contributor": null,
+      "rationale": "Auto-pick INSIGHTFACE_DET_SIZE (640/480/320) based on median detected face size over a warmup window for speed/recall trade."
+    },
+    {
+      "id": "IMPROVEMENT_model_upgrades_evaluate",
+      "label": "Model Upgrades (Evaluate, Don't Rush)",
+      "file_type": "rationale",
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 2.6",
+      "source_url": null,
+      "captured_at": "2026-06-23",
+      "author": null,
+      "contributor": null,
+      "rationale": "Evaluate AdaFace (pose/low-quality) and BoT-SORT/StrongSORT (occlusion robustness) as drop-in replacements behind config, A/B on detection_events."
+    },
+    {
+      "id": "CONCEPT_arcface",
+      "label": "ArcFace Face Embeddings",
+      "file_type": "rationale",
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 1",
+      "source_url": null,
+      "captured_at": "2026-06-18",
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "CONCEPT_osnet",
+      "label": "OSNet Body Re-ID Embeddings",
+      "file_type": "rationale",
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 1",
+      "source_url": null,
+      "captured_at": "2026-06-18",
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "CONCEPT_bytetrack",
+      "label": "ByteTrack Tracker",
+      "file_type": "rationale",
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 2B / Section 4 Phase 4",
+      "source_url": null,
+      "captured_at": "2026-06-18",
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "CONCEPT_dbscan",
+      "label": "DBSCAN Clustering",
+      "file_type": "rationale",
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 3A",
+      "source_url": null,
+      "captured_at": "2026-06-18",
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "CONCEPT_hnsw",
+      "label": "HNSW Vector Index (pgvector)",
+      "file_type": "rationale",
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 1.1",
+      "source_url": null,
+      "captured_at": "2026-06-23",
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "CONCEPT_adaface",
+      "label": "AdaFace Pose-Invariant Face Recognition",
+      "file_type": "rationale",
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 3C",
+      "source_url": null,
+      "captured_at": "2026-06-18",
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "CONCEPT_botsort",
+      "label": "BoT-SORT Tracker",
+      "file_type": "rationale",
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 3C",
+      "source_url": null,
+      "captured_at": "2026-06-18",
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "CONCEPT_strong_sort",
+      "label": "StrongSORT Tracker",
+      "file_type": "rationale",
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 3C",
+      "source_url": null,
+      "captured_at": "2026-06-18",
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "MODULE_identity_resolver",
+      "label": "identity_resolver.py",
+      "file_type": "code",
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 4 Phase 2",
+      "source_url": null,
+      "captured_at": "2026-06-18",
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "MODULE_cv_pipeline",
+      "label": "cv_pipeline.py",
+      "file_type": "code",
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 4 Phase 4 / IMPROVEMENT_PLAN.md Section 1.2-1.4",
+      "source_url": null,
+      "captured_at": "2026-06-18",
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "MODULE_temporal_consistency",
+      "label": "temporal_consistency.py",
+      "file_type": "code",
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 1",
+      "source_url": null,
+      "captured_at": "2026-06-18",
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "MODULE_auto_enroller",
+      "label": "auto_enroller.update_after_match",
+      "file_type": "code",
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 2.1",
+      "source_url": null,
+      "captured_at": "2026-06-23",
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "MODULE_detection_pipeline",
+      "label": "detection_pipeline.process_detections",
+      "file_type": "code",
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 2.2",
+      "source_url": null,
+      "captured_at": "2026-06-23",
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "MODULE_rtsp_native",
+      "label": "app/services/rtsp_native.py",
+      "file_type": "code",
+      "source_file": "backend/requirements.txt",
+      "source_location": "imageio-ffmpeg comment",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "MIGRATION_001_restaurant_schema",
+      "label": "alembic/versions/001_restaurant_schema.py",
+      "file_type": "code",
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 1.1",
+      "source_url": null,
+      "captured_at": "2026-06-23",
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "CONCEPT_pgvector",
+      "label": "pgvector Extension",
+      "file_type": "rationale",
+      "source_file": "backend/requirements.txt",
+      "source_location": "line: pgvector>=0.3.0",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "CONCEPT_alembic",
+      "label": "Alembic Migrations",
+      "file_type": "rationale",
+      "source_file": "backend/requirements.txt",
+      "source_location": "line: alembic>=1.13.0",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "CONCEPT_fastapi",
+      "label": "FastAPI Web Framework",
+      "file_type": "rationale",
+      "source_file": "backend/requirements.txt",
+      "source_location": "line: fastapi>=0.115.0",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "CONCEPT_insightface",
+      "label": "InsightFace",
+      "file_type": "rationale",
+      "source_file": "backend/requirements.txt",
+      "source_location": "line: insightface>=0.7.3",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "CONCEPT_ultralytics",
+      "label": "Ultralytics YOLO",
+      "file_type": "rationale",
+      "source_file": "backend/requirements.txt",
+      "source_location": "line: ultralytics>=8.2.0",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "CONCEPT_onnxruntime",
+      "label": "ONNX Runtime",
+      "file_type": "rationale",
+      "source_file": "backend/requirements.txt",
+      "source_location": "line: onnxruntime>=1.18.0",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "CONCEPT_imageio_ffmpeg",
+      "label": "imageio-ffmpeg (bundled FFmpeg 7.x)",
+      "file_type": "rationale",
+      "source_file": "backend/requirements.txt",
+      "source_location": "line: imageio-ffmpeg>=0.5.1",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "IMPROVEMENT_PLAN_MD",
+      "target": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN_MD",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "line 6",
+      "weight": 1.0
+    },
+    {
+      "source": "ADVANCED_OPTIMIZATION_cross_camera_body_reid_fusion",
+      "target": "CONCEPT_osnet",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 2A",
+      "weight": 1.0
+    },
+    {
+      "source": "ADVANCED_OPTIMIZATION_cross_camera_body_reid_fusion",
+      "target": "CONCEPT_arcface",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 2A",
+      "weight": 1.0
+    },
+    {
+      "source": "ADVANCED_OPTIMIZATION_tracklet_based_identity_resolution",
+      "target": "CONCEPT_bytetrack",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 2B",
+      "weight": 1.0
+    },
+    {
+      "source": "ADVANCED_OPTIMIZATION_dynamic_pose_adaptive_thresholds",
+      "target": "CONCEPT_arcface",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 2C",
+      "weight": 1.0
+    },
+    {
+      "source": "ADVANCED_OPTIMIZATION_global_topology_aware_temporal_gate",
+      "target": "MODULE_temporal_consistency",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 2D",
+      "weight": 1.0
+    },
+    {
+      "source": "ADVANCED_OPTIMIZATION_offline_nightly_dedup",
+      "target": "CONCEPT_dbscan",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 3A",
+      "weight": 1.0
+    },
+    {
+      "source": "ADVANCED_OPTIMIZATION_feature_extractor_upgrades",
+      "target": "CONCEPT_botsort",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 3C",
+      "weight": 1.0
+    },
+    {
+      "source": "ADVANCED_OPTIMIZATION_feature_extractor_upgrades",
+      "target": "CONCEPT_strong_sort",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 3C",
+      "weight": 1.0
+    },
+    {
+      "source": "ADVANCED_OPTIMIZATION_feature_extractor_upgrades",
+      "target": "CONCEPT_adaface",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 3C",
+      "weight": 1.0
+    },
+    {
+      "source": "IMPROVEMENT_hnsw_ef_search_tuning",
+      "target": "CONCEPT_hnsw",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 1.1",
+      "weight": 1.0
+    },
+    {
+      "source": "IMPROVEMENT_hnsw_ef_search_tuning",
+      "target": "MODULE_identity_resolver",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 1.1",
+      "weight": 1.0
+    },
+    {
+      "source": "IMPROVEMENT_hnsw_ef_search_tuning",
+      "target": "MIGRATION_001_restaurant_schema",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 1.1",
+      "weight": 1.0
+    },
+    {
+      "source": "IMPROVEMENT_hnsw_ef_search_tuning",
+      "target": "CONCEPT_pgvector",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 1.1",
+      "weight": 1.0
+    },
+    {
+      "source": "IMPROVEMENT_per_person_arcface_fallback_gating",
+      "target": "MODULE_cv_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 1.2",
+      "weight": 1.0
+    },
+    {
+      "source": "IMPROVEMENT_per_person_arcface_fallback_gating",
+      "target": "CONCEPT_arcface",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 1.2",
+      "weight": 1.0
+    },
+    {
+      "source": "IMPROVEMENT_empty_frame_early_out",
+      "target": "MODULE_cv_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 1.3",
+      "weight": 1.0
+    },
+    {
+      "source": "IMPROVEMENT_tracklet_fast_path",
+      "target": "MODULE_cv_pipeline",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 1.4",
+      "weight": 1.0
+    },
+    {
+      "source": "IMPROVEMENT_tracklet_fast_path",
+      "target": "MODULE_identity_resolver",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 1.4",
+      "weight": 1.0
+    },
+    {
+      "source": "IMPROVEMENT_tracklet_fast_path",
+      "target": "ADVANCED_OPTIMIZATION_tracklet_based_identity_resolution",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 1.4 / Part 1 intro",
+      "weight": 1.0
+    },
+    {
+      "source": "IMPROVEMENT_consolidate_per_match_db_round_trips",
+      "target": "MODULE_auto_enroller",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 2.1",
+      "weight": 1.0
+    },
+    {
+      "source": "IMPROVEMENT_masked_face_periocular_batching",
+      "target": "MODULE_detection_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 2.2",
+      "weight": 1.0
+    },
+    {
+      "source": "IMPROVEMENT_masked_face_periocular_batching",
+      "target": "CONCEPT_arcface",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 2.2",
+      "weight": 1.0
+    },
+    {
+      "source": "IMPROVEMENT_persist_ef_search_at_role_level",
+      "target": "IMPROVEMENT_hnsw_ef_search_tuning",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 2.3",
+      "weight": 1.0
+    },
+    {
+      "source": "IMPROVEMENT_fused_score_reranking",
+      "target": "CONCEPT_osnet",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 2.4",
+      "weight": 1.0
+    },
+    {
+      "source": "IMPROVEMENT_fused_score_reranking",
+      "target": "ADVANCED_OPTIMIZATION_offline_nightly_dedup",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 2.4 vs Section 3A",
+      "weight": 1.0
+    },
+    {
+      "source": "IMPROVEMENT_detector_input_size_auto_selection",
+      "target": "CONCEPT_insightface",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 2.5",
+      "weight": 1.0
+    },
+    {
+      "source": "IMPROVEMENT_model_upgrades_evaluate",
+      "target": "CONCEPT_adaface",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 2.6",
+      "weight": 1.0
+    },
+    {
+      "source": "IMPROVEMENT_model_upgrades_evaluate",
+      "target": "CONCEPT_botsort",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 2.6",
+      "weight": 1.0
+    },
+    {
+      "source": "IMPROVEMENT_model_upgrades_evaluate",
+      "target": "CONCEPT_strong_sort",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md",
+      "source_location": "Section 2.6",
+      "weight": 1.0
+    },
+    {
+      "source": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN_MD",
+      "target": "MODULE_identity_resolver",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 4 Phase 2",
+      "weight": 1.0
+    },
+    {
+      "source": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN_MD",
+      "target": "MODULE_cv_pipeline",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 4 Phase 4",
+      "weight": 1.0
+    },
+    {
+      "source": "BACKEND_REQUIREMENTS_TXT",
+      "target": "CONCEPT_fastapi",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/requirements.txt",
+      "source_location": "line: fastapi>=0.115.0",
+      "weight": 1.0
+    },
+    {
+      "source": "BACKEND_REQUIREMENTS_TXT",
+      "target": "CONCEPT_pgvector",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/requirements.txt",
+      "source_location": "line: pgvector>=0.3.0",
+      "weight": 1.0
+    },
+    {
+      "source": "BACKEND_REQUIREMENTS_TXT",
+      "target": "CONCEPT_alembic",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/requirements.txt",
+      "source_location": "line: alembic>=1.13.0",
+      "weight": 1.0
+    },
+    {
+      "source": "BACKEND_REQUIREMENTS_TXT",
+      "target": "CONCEPT_insightface",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/requirements.txt",
+      "source_location": "line: insightface>=0.7.3",
+      "weight": 1.0
+    },
+    {
+      "source": "BACKEND_REQUIREMENTS_TXT",
+      "target": "CONCEPT_ultralytics",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/requirements.txt",
+      "source_location": "line: ultralytics>=8.2.0",
+      "weight": 1.0
+    },
+    {
+      "source": "BACKEND_REQUIREMENTS_TXT",
+      "target": "CONCEPT_onnxruntime",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/requirements.txt",
+      "source_location": "line: onnxruntime>=1.18.0",
+      "weight": 1.0
+    },
+    {
+      "source": "BACKEND_REQUIREMENTS_TXT",
+      "target": "CONCEPT_imageio_ffmpeg",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/requirements.txt",
+      "source_location": "line: imageio-ffmpeg>=0.5.1",
+      "weight": 1.0
+    },
+    {
+      "source": "CONCEPT_imageio_ffmpeg",
+      "target": "MODULE_rtsp_native",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/requirements.txt",
+      "source_location": "imageio-ffmpeg comment",
+      "weight": 1.0
+    },
+    {
+      "source": "ADVANCED_OPTIMIZATION_dynamic_pose_adaptive_thresholds",
+      "target": "CONCEPT_osnet",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md",
+      "source_location": "Section 2C",
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "phase1_body_reid_activation_tuning",
+      "label": "Phase 1: Body Re-ID Activation & Tuning",
+      "nodes": [
+        "ADVANCED_OPTIMIZATION_cross_camera_body_reid_fusion",
+        "CONCEPT_osnet",
+        "CONCEPT_arcface"
+      ],
+      "relation": "implement",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md"
+    },
+    {
+      "id": "phase2_pose_adaptive_thresholding",
+      "label": "Phase 2: Pose-Adaptive Thresholding",
+      "nodes": [
+        "ADVANCED_OPTIMIZATION_dynamic_pose_adaptive_thresholds",
+        "MODULE_identity_resolver"
+      ],
+      "relation": "implement",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md"
+    },
+    {
+      "id": "phase3_nightly_auto_dedup_sweep",
+      "label": "Phase 3: Nightly Auto-Dedup Sweep",
+      "nodes": [
+        "ADVANCED_OPTIMIZATION_offline_nightly_dedup",
+        "CONCEPT_dbscan"
+      ],
+      "relation": "implement",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md"
+    },
+    {
+      "id": "phase4_tracklet_tracking",
+      "label": "Phase 4: Tracklet Tracking",
+      "nodes": [
+        "ADVANCED_OPTIMIZATION_tracklet_based_identity_resolution",
+        "CONCEPT_bytetrack",
+        "MODULE_cv_pipeline"
+      ],
+      "relation": "implement",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md"
+    },
+    {
+      "id": "improvement_part1_shipped_set",
+      "label": "Part 1: Implemented Improvements",
+      "nodes": [
+        "IMPROVEMENT_hnsw_ef_search_tuning",
+        "IMPROVEMENT_per_person_arcface_fallback_gating",
+        "IMPROVEMENT_empty_frame_early_out",
+        "IMPROVEMENT_tracklet_fast_path"
+      ],
+      "relation": "form",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md"
+    },
+    {
+      "id": "improvement_part2_recommended_set",
+      "label": "Part 2: Recommended Next Steps",
+      "nodes": [
+        "IMPROVEMENT_consolidate_per_match_db_round_trips",
+        "IMPROVEMENT_masked_face_periocular_batching",
+        "IMPROVEMENT_persist_ef_search_at_role_level",
+        "IMPROVEMENT_fused_score_reranking",
+        "IMPROVEMENT_detector_input_size_auto_selection",
+        "IMPROVEMENT_model_upgrades_evaluate"
+      ],
+      "relation": "form",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "IMPROVEMENT_PLAN.md"
+    },
+    {
+      "id": "backend_cv_ml_stack",
+      "label": "Backend CV/ML Dependency Stack",
+      "nodes": [
+        "CONCEPT_fastapi",
+        "CONCEPT_pgvector",
+        "CONCEPT_alembic",
+        "CONCEPT_insightface",
+        "CONCEPT_ultralytics",
+        "CONCEPT_onnxruntime",
+        "CONCEPT_imageio_ffmpeg"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/requirements.txt"
+    },
+    {
+      "id": "multi_angle_dedup_problem",
+      "label": "Multi-Angle Cross-Camera Deduplication Problem",
+      "nodes": [
+        "CONCEPT_arcface",
+        "CONCEPT_osnet",
+        "MODULE_temporal_consistency",
+        "ADVANCED_OPTIMIZATION_cross_camera_body_reid_fusion",
+        "ADVANCED_OPTIMIZATION_global_topology_aware_temporal_gate"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "ADVANCED_OPTIMIZATION_AND_DEDUPLICATION_PLAN.md"
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

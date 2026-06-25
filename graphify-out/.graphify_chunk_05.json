@@ -1,0 +1,642 @@
+{
+  "nodes": [
+    {
+      "id": "visitor_80a60a29",
+      "label": "Visitor 80a60a29-0638-48e2-b7f5-3d50e255a963",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/80a60a29-0638-48e2-b7f5-3d50e255a963",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "face_2b02c137",
+      "label": "Face Crop 2b02c137-ecc7-410f-8480-29b9569b30fc",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/80a60a29-0638-48e2-b7f5-3d50e255a963/faces/2b02c137-ecc7-410f-8480-29b9569b30fc.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "visitor_82c8b743",
+      "label": "Visitor 82c8b743-6703-4732-a599-fe37fff65b7f",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/82c8b743-6703-4732-a599-fe37fff65b7f",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "thumbnail_82c8b743",
+      "label": "Thumbnail for Visitor 82c8b743",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/82c8b743-6703-4732-a599-fe37fff65b7f/thumbnail.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "face_3c393903",
+      "label": "Face Crop 3c393903-6ef6-4e01-be3a-e1f8c9b269eb",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/82c8b743-6703-4732-a599-fe37fff65b7f/faces/3c393903-6ef6-4e01-be3a-e1f8c9b269eb.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "visitor_93ddc0e9",
+      "label": "Visitor 93ddc0e9-45ab-4d95-94f2-4f60b94dff34",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "thumbnail_93ddc0e9",
+      "label": "Thumbnail for Visitor 93ddc0e9",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/thumbnail.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "face_4e587999",
+      "label": "Face Crop 4e587999-b39a-4c23-91dc-aec63dcbe054",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/faces/4e587999-b39a-4c23-91dc-aec63dcbe054.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "face_681b84e6",
+      "label": "Face Crop 681b84e6-78ad-4637-9bc2-1d3bc948c962",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/faces/681b84e6-78ad-4637-9bc2-1d3bc948c962.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "face_745c3e2d",
+      "label": "Face Crop 745c3e2d-75a7-409f-9b94-786f037b1f65",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/faces/745c3e2d-75a7-409f-9b94-786f037b1f65.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "face_7b1769c9",
+      "label": "Face Crop 7b1769c9-937f-4289-a1a8-528c333d2664",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/faces/7b1769c9-937f-4289-a1a8-528c333d2664.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "face_c7baddbb",
+      "label": "Face Crop c7baddbb-7dd4-4cbd-8148-5c54338a1704",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/faces/c7baddbb-7dd4-4cbd-8148-5c54338a1704.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "face_d05ecd65",
+      "label": "Face Crop d05ecd65-8c08-4e67-a41f-a1fb22ee1ec9",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/faces/d05ecd65-8c08-4e67-a41f-a1fb22ee1ec9.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "face_d4f530f5",
+      "label": "Face Crop d4f530f5-df42-4a92-a314-502f02d448a7",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/faces/d4f530f5-df42-4a92-a314-502f02d448a7.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "face_d6e59b56",
+      "label": "Face Crop d6e59b56-b6a7-4eb2-a91c-00bb1f9cb716",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/faces/d6e59b56-b6a7-4eb2-a91c-00bb1f9cb716.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "face_dfd73107",
+      "label": "Face Crop dfd73107-1786-42d0-9f39-ca7ee21a32e1",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/faces/dfd73107-1786-42d0-9f39-ca7ee21a32e1.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "visitor_9ebf00c2",
+      "label": "Visitor 9ebf00c2-24eb-469d-870c-058d9a2d3454",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/9ebf00c2-24eb-469d-870c-058d9a2d3454",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "thumbnail_9ebf00c2",
+      "label": "Thumbnail for Visitor 9ebf00c2",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/9ebf00c2-24eb-469d-870c-058d9a2d3454/thumbnail.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "face_153ce3cb",
+      "label": "Face Crop 153ce3cb-b211-424b-89cd-e301e5ce9574",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/9ebf00c2-24eb-469d-870c-058d9a2d3454/faces/153ce3cb-b211-424b-89cd-e301e5ce9574.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "face_1547db8d",
+      "label": "Face Crop 1547db8d-c3b0-41bc-a985-585ba0e21211",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/9ebf00c2-24eb-469d-870c-058d9a2d3454/faces/1547db8d-c3b0-41bc-a985-585ba0e21211.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "face_159f54da",
+      "label": "Face Crop 159f54da-bb8f-4950-b55a-b48609db7a48",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/9ebf00c2-24eb-469d-870c-058d9a2d3454/faces/159f54da-bb8f-4950-b55a-b48609db7a48.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "face_211a72e8",
+      "label": "Face Crop 211a72e8-d41f-4701-94a2-a6ab07627f19",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/9ebf00c2-24eb-469d-870c-058d9a2d3454/faces/211a72e8-d41f-4701-94a2-a6ab07627f19.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "face_41817feb",
+      "label": "Face Crop 41817feb-d940-4b9f-8a17-eaa617918421",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/9ebf00c2-24eb-469d-870c-058d9a2d3454/faces/41817feb-d940-4b9f-8a17-eaa617918421.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "face_83c80a06",
+      "label": "Face Crop 83c80a06-4aaa-4a1b-bf36-25012ad68936",
+      "file_type": "image",
+      "source_file": "backend/storage/visitor_photos/9ebf00c2-24eb-469d-870c-058d9a2d3454/faces/83c80a06-4aaa-4a1b-bf36-25012ad68936.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "visitor_photos_root",
+      "label": "Visitor Photos Storage Root",
+      "file_type": "rationale",
+      "source_file": "backend/storage/visitor_photos/",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "face_2b02c137",
+      "target": "visitor_80a60a29",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/80a60a29-0638-48e2-b7f5-3d50e255a963/faces/2b02c137-ecc7-410f-8480-29b9569b30fc.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "thumbnail_82c8b743",
+      "target": "visitor_82c8b743",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/82c8b743-6703-4732-a599-fe37fff65b7f/thumbnail.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "face_3c393903",
+      "target": "visitor_82c8b743",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/82c8b743-6703-4732-a599-fe37fff65b7f/faces/3c393903-6ef6-4e01-be3a-e1f8c9b269eb.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "thumbnail_93ddc0e9",
+      "target": "visitor_93ddc0e9",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/thumbnail.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "face_4e587999",
+      "target": "visitor_93ddc0e9",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/faces/4e587999-b39a-4c23-91dc-aec63dcbe054.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "face_681b84e6",
+      "target": "visitor_93ddc0e9",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/faces/681b84e6-78ad-4637-9bc2-1d3bc948c962.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "face_745c3e2d",
+      "target": "visitor_93ddc0e9",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/faces/745c3e2d-75a7-409f-9b94-786f037b1f65.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "face_7b1769c9",
+      "target": "visitor_93ddc0e9",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/faces/7b1769c9-937f-4289-a1a8-528c333d2664.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "face_c7baddbb",
+      "target": "visitor_93ddc0e9",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/faces/c7baddbb-7dd4-4cbd-8148-5c54338a1704.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "face_d05ecd65",
+      "target": "visitor_93ddc0e9",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/faces/d05ecd65-8c08-4e67-a41f-a1fb22ee1ec9.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "face_d4f530f5",
+      "target": "visitor_93ddc0e9",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/faces/d4f530f5-df42-4a92-a314-502f02d448a7.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "face_d6e59b56",
+      "target": "visitor_93ddc0e9",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/faces/d6e59b56-b6a7-4eb2-a91c-00bb1f9cb716.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "face_dfd73107",
+      "target": "visitor_93ddc0e9",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/faces/dfd73107-1786-42d0-9f39-ca7ee21a32e1.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "thumbnail_9ebf00c2",
+      "target": "visitor_9ebf00c2",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/9ebf00c2-24eb-469d-870c-058d9a2d3454/thumbnail.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "face_153ce3cb",
+      "target": "visitor_9ebf00c2",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/9ebf00c2-24eb-469d-870c-058d9a2d3454/faces/153ce3cb-b211-424b-89cd-e301e5ce9574.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "face_1547db8d",
+      "target": "visitor_9ebf00c2",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/9ebf00c2-24eb-469d-870c-058d9a2d3454/faces/1547db8d-c3b0-41bc-a985-585ba0e21211.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "face_159f54da",
+      "target": "visitor_9ebf00c2",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/9ebf00c2-24eb-469d-870c-058d9a2d3454/faces/159f54da-bb8f-4950-b55a-b48609db7a48.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "face_211a72e8",
+      "target": "visitor_9ebf00c2",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/9ebf00c2-24eb-469d-870c-058d9a2d3454/faces/211a72e8-d41f-4701-94a2-a6ab07627f19.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "face_41817feb",
+      "target": "visitor_9ebf00c2",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/9ebf00c2-24eb-469d-870c-058d9a2d3454/faces/41817feb-d940-4b9f-8a17-eaa617918421.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "face_83c80a06",
+      "target": "visitor_9ebf00c2",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/9ebf00c2-24eb-469d-870c-058d9a2d3454/faces/83c80a06-4aaa-4a1b-bf36-25012ad68936.jpg",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "visitor_80a60a29",
+      "target": "visitor_photos_root",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/80a60a29-0638-48e2-b7f5-3d50e255a963/",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "visitor_82c8b743",
+      "target": "visitor_photos_root",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/82c8b743-6703-4732-a599-fe37fff65b7f/",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "visitor_93ddc0e9",
+      "target": "visitor_photos_root",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "visitor_9ebf00c2",
+      "target": "visitor_photos_root",
+      "relation": "shares_data_with",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/9ebf00c2-24eb-469d-870c-058d9a2d3454/",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "thumbnail_93ddc0e9",
+      "target": "face_d4f530f5",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "thumbnail_9ebf00c2",
+      "target": "face_83c80a06",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "backend/storage/visitor_photos/9ebf00c2-24eb-469d-870c-058d9a2d3454/",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "thumbnail_82c8b743",
+      "target": "face_3c393903",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "backend/storage/visitor_photos/82c8b743-6703-4732-a599-fe37fff65b7f/",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "visitor_93ddc0e9",
+      "relation": "conceptually_related_to",
+      "target": "visitor_9ebf00c2",
+      "confidence": "AMBIGUOUS",
+      "confidence_score": 0.2,
+      "source_file": "backend/storage/visitor_photos/",
+      "source_location": null,
+      "weight": 0.5
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "visitor_93ddc0e9_face_collection",
+      "label": "Visitor 93ddc0e9 Face Crop Set",
+      "nodes": [
+        "visitor_93ddc0e9",
+        "face_4e587999",
+        "face_681b84e6",
+        "face_745c3e2d",
+        "face_7b1769c9",
+        "face_c7baddbb",
+        "face_d05ecd65",
+        "face_d4f530f5",
+        "face_d6e59b56",
+        "face_dfd73107"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/93ddc0e9-45ab-4d95-94f2-4f60b94dff34/faces/"
+    },
+    {
+      "id": "visitor_9ebf00c2_face_collection",
+      "label": "Visitor 9ebf00c2 Face Crop Set",
+      "nodes": [
+        "visitor_9ebf00c2",
+        "face_153ce3cb",
+        "face_1547db8d",
+        "face_159f54da",
+        "face_211a72e8",
+        "face_41817feb",
+        "face_83c80a06"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/9ebf00c2-24eb-469d-870c-058d9a2d3454/faces/"
+    },
+    {
+      "id": "visitor_82c8b743_face_collection",
+      "label": "Visitor 82c8b743 Face Crop Set",
+      "nodes": [
+        "visitor_82c8b743",
+        "face_3c393903"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/82c8b743-6703-4732-a599-fe37fff65b7f/faces/"
+    },
+    {
+      "id": "visitor_80a60a29_face_collection",
+      "label": "Visitor 80a60a29 Face Crop Set",
+      "nodes": [
+        "visitor_80a60a29",
+        "face_2b02c137"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/storage/visitor_photos/80a60a29-0638-48e2-b7f5-3d50e255a963/faces/"
+    },
+    {
+      "id": "thumbnail_face_relationship_group",
+      "label": "Thumbnail-Face Association Group",
+      "nodes": [
+        "thumbnail_82c8b743",
+        "face_3c393903",
+        "thumbnail_93ddc0e9",
+        "face_d4f530f5",
+        "thumbnail_9ebf00c2",
+        "face_83c80a06"
+      ],
+      "relation": "form",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "backend/storage/visitor_photos/"
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

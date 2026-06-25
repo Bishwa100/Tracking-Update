@@ -1,0 +1,6 @@
+C:\Users\jana.bishwanath\Desktop\Person Tracking\Tracking-Update\backend\storage\visitor_photos\edc9f616-781d-41c4-9532-9ae4929c3a5c\faces\b87fe9d2-55db-4c8a-8056-a278d23b9e04.jpg
+C:\Users\jana.bishwanath\Desktop\Person Tracking\Tracking-Update\backend\storage\visitor_photos\edc9f616-781d-41c4-9532-9ae4929c3a5c\faces\d1403460-f3f4-4170-abd6-74a671b7a15b.jpg
+C:\Users\jana.bishwanath\Desktop\Person Tracking\Tracking-Update\backend\storage\visitor_photos\f0fb49ef-2b31-46c1-9a11-4f5850922177\thumbnail.jpg
+C:\Users\jana.bishwanath\Desktop\Person Tracking\Tracking-Update\backend\storage\visitor_photos\f0fb49ef-2b31-46c1-9a11-4f5850922177\faces\910b687c-b4f1-49d1-9656-16f0d61f79af.jpg
+C:\Users\jana.bishwanath\Desktop\Person Tracking\Tracking-Update\backend\storage\visitor_photos\fc2e179d-1542-4c54-bb30-a3ffe31bc6cf\thumbnail.jpg
+C:\Users\jana.bishwanath\Desktop\Person Tracking\Tracking-Update\backend\storage\visitor_photos\fc2e179d-1542-4c54-bb30-a3ffe31bc6cf\faces\82773ed9-1948-41b6-84f6-5fa8fd1d4a42.jpg

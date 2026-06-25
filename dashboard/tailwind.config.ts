@@ -55,11 +55,29 @@ const config: Config = {
           "70%": { boxShadow: "0 0 0 8px rgba(16,185,129,0)" },
           "100%": { boxShadow: "0 0 0 0 rgba(16,185,129,0)" },
         },
+        /* Toast slide-up + fade-in entrance. */
+        "toast-in": {
+          "0%": { opacity: "0", transform: "translateY(16px) scale(0.96)" },
+          "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
+        /* Toast slide-right + fade-out exit. */
+        "toast-out": {
+          "0%": { opacity: "1", transform: "translateX(0) scale(1)" },
+          "100%": { opacity: "0", transform: "translateX(80px) scale(0.96)" },
+        },
+        /* Toast progress bar countdown. */
+        "toast-progress": {
+          "0%": { width: "100%" },
+          "100%": { width: "0%" },
+        },
       },
       animation: {
         "fade-in": "fade-in 0.3s ease-out",
         shimmer: "shimmer 1.5s infinite",
         "pulse-ring": "pulse-ring 2s infinite",
+        "toast-in": "toast-in 0.3s ease-out forwards",
+        "toast-out": "toast-out 0.3s ease-in forwards",
+        "toast-progress": "toast-progress 4s linear forwards",
       },
     },
   },
